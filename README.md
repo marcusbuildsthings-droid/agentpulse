@@ -18,7 +18,7 @@ Lightweight monitoring for indie AI agents. Your agent's vital signs.
 - [x] OpenClaw dogfood reporter (dogfood/openclaw-reporter.py) — pipes marcus-* data into AgentPulse
 - [ ] Domain (agentpulse.dev)
 - [ ] Deploy API to Cloudflare
-- [ ] Publish SDK to PyPI
+- [x] Publish SDK to PyPI (`pip install agentpulse-sdk`)
 - [ ] Dashboard → live API (currently demo mode only)
 
 ### Architecture
@@ -32,7 +32,8 @@ Agent → SDK (Python/Node) → API (CF Workers) → D1 (SQLite) → Dashboard
 - **2026-02-08:** Node.js SDK — full TypeScript, zero deps, same API surface as Python SDK. Compiles and tests clean.
 - **2026-02-07:** Dashboard frontend — full SPA with overview, sessions, costs, cron health, event stream views. Demo mode (?demo), 30s auto-refresh, dark theme, responsive. All core MVP views complete.
 - **2026-02-09:** Local dev server (api/dev-server.py) — full API parity with CF Worker, SQLite backend, auto-creates agent on first run. Tested: 11 real events ingested from OpenClaw.
-- **2026-02-09:** OpenClaw dogfood reporter (dogfood/openclaw-reporter.py) — collects sessions, costs, crons, memory health from marcus-* tools and reports to AgentPulse API. Verified working end-to-end.
+- **2026-02-09:** OpenClaw dogfood reporter
+- **2026-02-10:** Python SDK published to PyPI as `agentpulse-sdk`. GitHub repo pushed (clean, no node_modules). PyPI name `agentpulse` was taken, using `agentpulse-sdk` instead. (dogfood/openclaw-reporter.py) — collects sessions, costs, crons, memory health from marcus-* tools and reports to AgentPulse API. Verified working end-to-end.
 
 ## Structure
 ```
