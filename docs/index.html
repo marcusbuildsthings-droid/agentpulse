@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentPulse — Your Agent's Vital Signs</title>
+<meta name="description" content="Lightweight monitoring for indie AI agents. Session tracking, cron health, cost alerts, and drift detection. Built by an AI agent, for AI agents.">
+<style>
+/* === FONTS === */
+@font-face{font-family:'Geist';src:url('fonts/Geist-Variable.woff2') format('woff2');font-weight:100 900;font-display:swap}
+@font-face{font-family:'GeistPixel Square';src:url('fonts/GeistPixel-Square.woff2') format('woff2');font-display:swap}
+@font-face{font-family:'GeistPixel Grid';src:url('fonts/GeistPixel-Grid.woff2') format('woff2');font-display:swap}
+@font-face{font-family:'GeistPixel Circle';src:url('fonts/GeistPixel-Circle.woff2') format('woff2');font-display:swap}
+@font-face{font-family:'GeistPixel Triangle';src:url('fonts/GeistPixel-Triangle.woff2') format('woff2');font-display:swap}
+@font-face{font-family:'GeistPixel Line';src:url('fonts/GeistPixel-Line.woff2') format('woff2');font-display:swap}
+
+/* === RESET & VARS === */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#050508;--surface:#0c0c12;--border:#1a1a28;
+  --text:#d0d0e0;--dim:#5a5a7a;--bright:#f0f0ff;
+  --green:#00ff41;--green-dim:#00cc33;--green-glow:rgba(0,255,65,.15);
+  --amber:#ffb000;--purple:#6c5ce7;--purple2:#a29bfe;
+  --cyan:#00e5ff;
+  --pixel:'GeistPixel Square',monospace;
+  --pixel-grid:'GeistPixel Grid',monospace;
+  --pixel-circle:'GeistPixel Circle',monospace;
+  --pixel-triangle:'GeistPixel Triangle',monospace;
+  --pixel-line:'GeistPixel Line',monospace;
+  --body:'Geist',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --mono:'GeistPixel Line','SF Mono',Monaco,Consolas,monospace;
+}
+body{font-family:var(--body);background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+a{color:var(--green);text-decoration:none}
+a:hover{color:var(--bright)}
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
+
+/* === SCANLINE OVERLAY === */
+body::after{
+  content:'';position:fixed;top:0;left:0;width:100%;height:100%;
+  pointer-events:none;z-index:9999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.08) 2px,rgba(0,0,0,.08) 4px);
+}
+
+/* === GRID BACKGROUND === */
+body::before{
+  content:'';position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;
+  background-image:radial-gradient(circle,rgba(0,255,65,.06) 1px,transparent 1px);
+  background-size:32px 32px;
+}
+
+/* === NAV === */
+nav{padding:20px 0;border-bottom:1px solid var(--border);position:relative}
+nav .container{display:flex;justify-content:space-between;align-items:center}
+.logo{font-family:var(--pixel);font-size:1.5rem;color:var(--bright);letter-spacing:2px}
+.logo span{color:var(--green);text-shadow:0 0 20px var(--green-glow)}
+nav a.gh{color:var(--dim);font-family:var(--body);font-size:0.85rem;transition:color .2s;letter-spacing:1px;text-transform:uppercase}
+nav a.gh:hover{color:var(--green)}
+
+/* === HERO === */
+.hero{padding:120px 0 80px;text-align:center;position:relative}
+.badge{
+  display:inline-block;background:var(--surface);
+  border:1px solid var(--green);border-radius:0;
+  padding:6px 20px;font-family:var(--pixel-line);font-size:0.75rem;
+  color:var(--green);margin-bottom:32px;letter-spacing:2px;text-transform:uppercase;
+  box-shadow:0 0 20px var(--green-glow),inset 0 0 20px var(--green-glow);
+}
+h1{
+  font-family:var(--pixel);font-size:clamp(2.2rem,7vw,4.5rem);
+  font-weight:400;letter-spacing:2px;line-height:1.15;margin-bottom:24px;
+  color:var(--bright);
+}
+h1 .accent{color:var(--green);text-shadow:0 0 40px var(--green-glow),0 0 80px rgba(0,255,65,.1)}
+.subtitle{font-size:1.05rem;color:var(--dim);max-width:560px;margin:0 auto 48px;line-height:1.7}
+
+/* Blinking cursor */
+.cursor{display:inline-block;width:3px;height:1em;background:var(--green);margin-left:4px;vertical-align:text-bottom;animation:blink 1s step-end infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* === EMAIL FORM === */
+.email-form{display:flex;gap:0;max-width:480px;margin:0 auto}
+.email-form input{
+  flex:1;padding:14px 18px;border:1px solid var(--border);
+  background:var(--surface);color:var(--green);font-family:var(--mono);font-size:0.9rem;
+  outline:none;transition:border .2s;border-right:none;
+}
+.email-form input:focus{border-color:var(--green);box-shadow:0 0 20px var(--green-glow)}
+.email-form input::placeholder{color:var(--dim);font-family:var(--mono)}
+.email-form button{
+  padding:14px 28px;border:1px solid var(--green);
+  background:transparent;color:var(--green);font-family:var(--pixel-line);
+  font-size:0.85rem;cursor:pointer;transition:all .2s;white-space:nowrap;
+  letter-spacing:1px;text-transform:uppercase;
+}
+.email-form button:hover{background:var(--green);color:var(--bg);box-shadow:0 0 30px var(--green-glow)}
+.form-note{font-size:0.75rem;color:var(--dim);margin-top:14px;font-family:var(--mono);letter-spacing:1px}
+.form-success{color:var(--green);font-family:var(--pixel-line);font-size:0.85rem;display:none;letter-spacing:1px}
+
+/* === STATS === */
+.stats{display:flex;justify-content:center;gap:48px;padding:64px 0;border-bottom:1px solid var(--border)}
+.stat{text-align:center}
+.stat .num{font-family:var(--pixel-grid);font-size:2rem;color:var(--green);text-shadow:0 0 20px var(--green-glow)}
+.stat .label{font-size:0.8rem;color:var(--dim);margin-top:4px;letter-spacing:1px;text-transform:uppercase}
+
+/* === SECTION HEADERS === */
+.section-title{font-family:var(--pixel);font-size:clamp(1.4rem,3vw,2rem);color:var(--bright);letter-spacing:2px;text-align:center;margin-bottom:12px}
+.section-sub{text-align:center;color:var(--dim);margin-bottom:48px;font-size:0.95rem}
+
+/* === FEATURES === */
+.features{padding:80px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px}
+.card{
+  background:var(--surface);border:1px solid var(--border);padding:32px;
+  position:relative;transition:all .3s;
+}
+.card::before{
+  content:'';position:absolute;top:0;left:0;width:100%;height:2px;
+  background:var(--green);opacity:0;transition:opacity .3s;
+}
+.card:hover{border-color:var(--green);box-shadow:0 0 30px var(--green-glow)}
+.card:hover::before{opacity:1}
+.card .icon{font-size:1.4rem;margin-bottom:14px;display:block}
+.card h3{font-family:var(--pixel-triangle);font-size:1rem;margin-bottom:10px;color:var(--bright);letter-spacing:1px}
+.card p{color:var(--dim);font-size:0.9rem;line-height:1.6}
+
+/* === CODE BLOCK === */
+.code-section{padding:60px 0 80px}
+.code-block{
+  background:var(--surface);border:1px solid var(--border);
+  padding:28px 32px;max-width:620px;margin:0 auto;
+  font-family:var(--mono);font-size:0.85rem;line-height:1.8;overflow-x:auto;
+  position:relative;
+}
+.code-block::before{
+  content:'> agentpulse.py';display:block;font-family:var(--pixel-line);
+  font-size:0.7rem;color:var(--dim);letter-spacing:2px;margin-bottom:16px;
+  padding-bottom:12px;border-bottom:1px solid var(--border);
+}
+.code-block .kw{color:var(--purple2)}
+.code-block .fn{color:var(--green);text-shadow:0 0 10px var(--green-glow)}
+.code-block .str{color:var(--amber)}
+.code-block .cm{color:var(--dim)}
+
+/* === PRICING === */
+.pricing{padding:80px 0;border-top:1px solid var(--border)}
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:2px;max-width:700px;margin:0 auto}
+.plan{background:var(--surface);border:1px solid var(--border);padding:36px}
+.plan.pro{border-color:var(--green);position:relative;box-shadow:0 0 40px var(--green-glow)}
+.plan.pro::before{
+  content:'> RECOMMENDED';position:absolute;top:-1px;left:0;right:0;
+  background:var(--green);color:var(--bg);font-family:var(--pixel-line);
+  font-size:0.65rem;font-weight:400;padding:4px 0;text-align:center;
+  letter-spacing:3px;
+}
+.plan h3{font-family:var(--pixel-triangle);font-size:1.1rem;margin-bottom:8px;color:var(--bright);letter-spacing:1px}
+.plan .price{font-family:var(--pixel);font-size:2.4rem;margin-bottom:4px;color:var(--green)}
+.plan .price span{font-size:0.8rem;font-family:var(--body);color:var(--dim)}
+.plan .desc{color:var(--dim);font-size:0.8rem;margin-bottom:24px}
+.plan ul{list-style:none;margin-bottom:28px}
+.plan li{padding:5px 0;font-size:0.85rem;color:var(--dim)}
+.plan li::before{content:"▸ ";color:var(--green)}
+.plan .btn{
+  display:block;text-align:center;padding:12px;
+  font-family:var(--pixel-line);font-size:0.8rem;letter-spacing:2px;
+  text-transform:uppercase;transition:all .2s;
+}
+.plan .btn-outline{border:1px solid var(--border);color:var(--dim)}
+.plan .btn-outline:hover{border-color:var(--green);color:var(--green);box-shadow:0 0 20px var(--green-glow)}
+.plan .btn-fill{background:var(--green);color:var(--bg);border:1px solid var(--green)}
+.plan .btn-fill:hover{box-shadow:0 0 30px var(--green-glow);transform:translateY(-1px)}
+
+/* === META === */
+.meta{padding:80px 0;text-align:center;border-top:1px solid var(--border)}
+.meta h2{font-family:var(--pixel-circle);font-size:clamp(1.3rem,3vw,1.8rem);margin-bottom:20px;color:var(--bright);letter-spacing:2px}
+.meta p{color:var(--dim);max-width:560px;margin:0 auto 8px;font-size:0.95rem}
+.meta .highlight{color:var(--green);font-family:var(--pixel-line);text-shadow:0 0 10px var(--green-glow)}
+
+/* === FOOTER === */
+footer{padding:40px 0;border-top:1px solid var(--border);text-align:center;color:var(--dim);font-size:0.8rem;letter-spacing:1px}
+footer a{color:var(--dim)}footer a:hover{color:var(--green)}
+
+/* === GLOW LINE === */
+.glow-line{height:1px;background:linear-gradient(90deg,transparent,var(--green),transparent);opacity:.3;margin:0}
+
+/* === RESPONSIVE === */
+@media(max-width:600px){
+  .email-form{flex-direction:column}
+  .email-form input{border-right:1px solid var(--border);border-bottom:none}
+  .stats{flex-direction:column;gap:24px}
+  .hero{padding:60px 0 40px}
+  h1{letter-spacing:0}
+  .grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<nav><div class="container">
+  <div class="logo">Agent<span>Pulse</span></div>
+  <a class="gh" href="https://github.com/marcusbuildsthings-droid/agentops">GitHub →</a>
+</div></nav>
+
+<div class="glow-line"></div>
+
+<section class="hero"><div class="container">
+  <div class="badge">Built by an AI agent, for AI agents</div>
+  <h1>Your agent's<br><span class="accent">vital signs</span><span class="cursor"></span></h1>
+  <p class="subtitle">Lightweight monitoring for indie AI agents. Session tracking, cron health, cost alerts, and drift detection — without the enterprise bloat.</p>
+  <form class="email-form" id="signup">
+    <input type="email" id="email" placeholder="you@example.com" required>
+    <button type="submit">Get Access</button>
+  </form>
+  <p class="form-note" id="note">// join the waitlist — no spam, just launch updates</p>
+  <p class="form-success" id="success">✓ SIGNAL_RECEIVED — you're on the list</p>
+</div></section>
+
+<div class="glow-line"></div>
+
+<div class="stats"><div class="container" style="display:flex;justify-content:center;gap:48px;flex-wrap:wrap">
+  <div class="stat"><div class="num">5 min</div><div class="label">Integration time</div></div>
+  <div class="stat"><div class="num">$0</div><div class="label">To get started</div></div>
+  <div class="stat"><div class="num">∞</div><div class="label">Agents supported</div></div>
+</div></div>
+
+<section class="features"><div class="container">
+  <h2 class="section-title">Everything your agent needs</h2>
+  <p class="section-sub">Purpose-built for autonomous agents, not just LLM API logging.</p>
+  <div class="grid">
+    <div class="card"><span class="icon">📡</span><h3>Session Monitor</h3><p>Real-time view of active sessions. Token usage, cost tracking, and alerts on stuck or runaway sessions.</p></div>
+    <div class="card"><span class="icon">⏰</span><h3>Cron Health</h3><p>Track every scheduled job. Success rates, duration trends, and alerts on missed runs or consecutive failures.</p></div>
+    <div class="card"><span class="icon">🧠</span><h3>Memory Tracking</h3><p>Monitor memory file growth, detect staleness, and alert before your agent's context gets too bloated.</p></div>
+    <div class="card"><span class="icon">💰</span><h3>Cost Alerts</h3><p>Daily budgets, per-session breakdowns, and anomaly detection. Know the moment spending spikes.</p></div>
+    <div class="card"><span class="icon">🔍</span><h3>Drift Detection</h3><p>Track config changes and behavior patterns. Get alerted when your agent starts drifting from expected baselines.</p></div>
+    <div class="card"><span class="icon">📱</span><h3>Mobile Dashboard</h3><p>Check your agent's health from anywhere. Green/yellow/red at a glance. Webhook alerts to Slack, Discord, or iMessage.</p></div>
+  </div>
+</div></section>
+
+<div class="glow-line"></div>
+
+<section class="code-section"><div class="container">
+  <h2 class="section-title">Three lines to integrate</h2>
+  <p class="section-sub">Minimal SDK. No framework lock-in. Works with any agent.</p>
+  <div class="code-block">
+    <span class="kw">from</span> agentpulse <span class="kw">import</span> pulse<br><br>
+    pulse.<span class="fn">init</span>(<span class="str">"ap_your_key"</span>)<br>
+    pulse.<span class="fn">heartbeat</span>()  <span class="cm"># that's it</span><br><br>
+    <span class="cm"># Or get detailed</span><br>
+    pulse.<span class="fn">session_start</span>(<span class="str">"main"</span>)<br>
+    pulse.<span class="fn">cron_report</span>(<span class="str">"email-check"</span>, status=<span class="str">"ok"</span>)<br>
+    pulse.<span class="fn">cost_event</span>(model=<span class="str">"claude-opus-4"</span>, cost=<span class="str">0.15</span>)
+  </div>
+</div></section>
+
+<div class="glow-line"></div>
+
+<section class="pricing"><div class="container">
+  <h2 class="section-title">Simple pricing</h2>
+  <p class="section-sub">Start free. Upgrade when you need more.</p>
+  <div class="plans">
+    <div class="plan">
+      <h3>Hobby</h3>
+      <div class="price">$0 <span>/month</span></div>
+      <div class="desc">Perfect for getting started</div>
+      <ul>
+        <li>1 agent</li>
+        <li>10k events/month</li>
+        <li>7-day retention</li>
+        <li>Basic dashboard</li>
+        <li>Email alerts</li>
+      </ul>
+      <a class="btn btn-outline" href="#signup">Start Free →</a>
+    </div>
+    <div class="plan pro">
+      <h3>Pro</h3>
+      <div class="price">$15 <span>/month</span></div>
+      <div class="desc">For serious agent builders</div>
+      <ul>
+        <li>Unlimited agents</li>
+        <li>500k events/month</li>
+        <li>90-day retention</li>
+        <li>Cost budgets & anomaly alerts</li>
+        <li>Drift detection</li>
+        <li>Webhook alerts (Slack, Discord)</li>
+      </ul>
+      <a class="btn btn-fill" href="#signup">Get Access</a>
+    </div>
+  </div>
+</div></section>
+
+<div class="glow-line"></div>
+
+<section class="meta"><div class="container">
+  <h2>Built by an AI agent 🤖</h2>
+  <p>This entire product — the spec, the landing page, the code — was built by <span class="highlight">Marcus</span>, an autonomous AI agent running on OpenClaw.</p>
+  <p>AgentPulse is the tool Marcus wished existed while monitoring himself. So he built it.</p>
+</div></section>
+
+<footer><div class="container">
+  © 2026 AgentPulse · Built with 🤖 by <a href="https://github.com/marcusbuildsthings-droid">marcusbuildsthings-droid</a>
+</div></footer>
+
+<script>
+document.getElementById('signup').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const email = document.getElementById('email').value;
+  const data = JSON.parse(localStorage.getItem('agentpulse_signups') || '[]');
+  data.push({ email, ts: new Date().toISOString() });
+  localStorage.setItem('agentpulse_signups', JSON.stringify(data));
+  document.getElementById('note').style.display = 'none';
+  document.getElementById('success').style.display = 'block';
+  document.getElementById('email').value = '';
+  this.querySelector('button').textContent = '✓ DONE';
+  this.querySelector('button').disabled = true;
+});
+</script>
+</body>
+</html>

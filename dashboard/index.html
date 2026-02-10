@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentPulse Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242736;
+      --border: #2e3144;
+      --text: #e4e5eb;
+      --text2: #8b8fa3;
+      --accent: #6366f1;
+      --accent2: #818cf8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --blue: #3b82f6;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* Layout */
+    .app { display: flex; min-height: 100vh; }
+    .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; flex-shrink: 0; }
+    .sidebar h1 { font-size: 16px; padding: 0 20px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+    .sidebar h1 .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; }
+    .sidebar nav { padding: 12px 0; }
+    .sidebar nav a { display: flex; align-items: center; gap: 10px; padding: 8px 20px; color: var(--text2); text-decoration: none; font-size: 14px; transition: all 0.15s; }
+    .sidebar nav a:hover, .sidebar nav a.active { color: var(--text); background: var(--surface2); }
+    .sidebar nav a.active { border-left: 2px solid var(--accent); }
+
+    .main { flex: 1; padding: 24px 32px; overflow-y: auto; }
+    .main h2 { font-size: 20px; margin-bottom: 20px; font-weight: 600; }
+
+    /* Cards */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .card .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .card .value { font-size: 28px; font-weight: 700; }
+    .card .sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+    .card .value.green { color: var(--green); }
+    .card .value.red { color: var(--red); }
+    .card .value.yellow { color: var(--yellow); }
+
+    /* Tables */
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 24px; overflow: hidden; }
+    .panel .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 20px; text-align: left; font-size: 13px; }
+    th { color: var(--text2); font-weight: 500; border-bottom: 1px solid var(--border); }
+    td { border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+
+    /* Status badges */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge.ok { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge.fail { background: rgba(239,68,68,0.15); color: var(--red); }
+    .badge.warn { background: rgba(234,179,8,0.15); color: var(--yellow); }
+
+    /* Chart placeholder */
+    .chart-area { height: 200px; display: flex; align-items: flex-end; gap: 4px; padding: 20px; }
+    .bar { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 4px; transition: height 0.3s; position: relative; }
+    .bar:hover { background: var(--accent2); }
+    .bar .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; font-size: 11px; white-space: nowrap; }
+    .bar:hover .tooltip { display: block; }
+
+    /* Config panel */
+    .config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    .config-panel label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+    .config-panel input { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); width: 100%; max-width: 400px; font-size: 14px; margin-bottom: 16px; }
+    .config-panel button { background: var(--accent); color: white; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+    .config-panel button:hover { background: var(--accent2); }
+
+    /* Period selector */
+    .period-select { display: flex; gap: 4px; }
+    .period-select button { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+    .period-select button.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    /* Event stream */
+    .event-stream { max-height: 400px; overflow-y: auto; }
+    .event-row { display: flex; align-items: center; gap: 12px; padding: 8px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .event-row:last-child { border-bottom: none; }
+    .event-row .ts { color: var(--text2); font-family: monospace; font-size: 12px; min-width: 80px; }
+    .event-row .kind { font-weight: 600; min-width: 80px; }
+    .event-row .detail { color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Loading */
+    .loading { text-align: center; padding: 40px; color: var(--text2); }
+
+    /* Empty state */
+    .empty { text-align: center; padding: 60px 20px; }
+    .empty h3 { font-size: 18px; margin-bottom: 8px; }
+    .empty p { color: var(--text2); font-size: 14px; max-width: 400px; margin: 0 auto; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { padding: 16px; }
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="sidebar">
+      <h1><span class="dot"></span> AgentPulse</h1>
+      <nav>
+        <a href="#" data-view="overview" class="active">📊 Overview</a>
+        <a href="#" data-view="sessions">🔄 Sessions</a>
+        <a href="#" data-view="costs">💰 Costs</a>
+        <a href="#" data-view="cron">⏰ Cron Jobs</a>
+        <a href="#" data-view="events">📡 Events</a>
+        <a href="#" data-view="settings">⚙️ Settings</a>
+      </nav>
+    </div>
+    <div class="main" id="content">
+      <!-- Dynamic content -->
+    </div>
+  </div>
+
+  <script>
+    // ── State ────────────────────────────────────────────────
+    const state = {
+      apiUrl: localStorage.getItem('ap_api_url') || '',
+      apiKey: localStorage.getItem('ap_api_key') || '',
+      period: '24h',
+      view: 'overview',
+      stats: null,
+      events: [],
+      refreshInterval: null,
+    };
+
+    // ── API ─────────────────────────────────────────────────
+    async function api(path, params = {}) {
+      if (!state.apiUrl || !state.apiKey) return null;
+      const url = new URL(path, state.apiUrl);
+      Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+      try {
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${state.apiKey}` },
+        });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch { return null; }
+    }
+
+    async function fetchStats() {
+      state.stats = await api('/v1/stats', { period: state.period });
+    }
+
+    async function fetchEvents(kind, limit = 50) {
+      const data = await api('/v1/events', { kind, limit, ...(state.period === '7d' ? { since: (Date.now()/1000 - 604800).toString() } : state.period === '30d' ? { since: (Date.now()/1000 - 2592000).toString() } : { since: (Date.now()/1000 - 86400).toString() }) });
+      return data?.events || [];
+    }
+
+    // ── Views ───────────────────────────────────────────────
+    function needsConfig() {
+      return !state.apiUrl || !state.apiKey;
+    }
+
+    function renderSettings() {
+      return `
+        <h2>Settings</h2>
+        <div class="config-panel">
+          <label>API Endpoint</label>
+          <input id="cfg-url" type="url" placeholder="https://api.agentpulse.dev" value="${state.apiUrl}">
+          <label>API Key</label>
+          <input id="cfg-key" type="text" placeholder="ap_..." value="${state.apiKey}">
+          <button onclick="saveConfig()">Save & Connect</button>
+        </div>
+      `;
+    }
+
+    function periodSelector() {
+      return `<div class="period-select">
+        ${['24h', '7d', '30d'].map(p =>
+          `<button class="${state.period === p ? 'active' : ''}" onclick="setPeriod('${p}')">${p}</button>`
+        ).join('')}
+      </div>`;
+    }
+
+    function renderOverview() {
+      if (needsConfig()) return renderSettings();
+      const s = state.stats;
+      if (!s) return '<div class="loading">Loading...</div>';
+
+      const totalEvents = Object.values(s.events || {}).reduce((a, b) => a + b, 0);
+      const costStr = s.cost?.usd != null ? `$${s.cost.usd.toFixed(2)}` : '$0.00';
+      const tokenStr = s.cost?.tokens != null ? formatNum(s.cost.tokens) : '0';
+
+      const cronJobs = s.cron_health || [];
+      const cronOk = cronJobs.filter(j => j.status === 'ok').reduce((a, j) => a + j.count, 0);
+      const cronFail = cronJobs.filter(j => j.status !== 'ok').reduce((a, j) => a + j.count, 0);
+
+      const sessions = s.events?.session_start || 0;
+
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <h2>Overview</h2>
+          ${periodSelector()}
+        </div>
+        <div class="grid">
+          <div class="card">
+            <div class="label">Total Events</div>
+            <div class="value">${formatNum(totalEvents)}</div>
+            <div class="sub">Last ${state.period}</div>
+          </div>
+          <div class="card">
+            <div class="label">Sessions</div>
+            <div class="value">${sessions}</div>
+            <div class="sub">Started in period</div>
+          </div>
+          <div class="card">
+            <div class="label">Cost</div>
+            <div class="value ${s.cost?.usd > 10 ? 'red' : s.cost?.usd > 5 ? 'yellow' : 'green'}">${costStr}</div>
+            <div class="sub">${tokenStr} tokens</div>
+          </div>
+          <div class="card">
+            <div class="label">Cron Health</div>
+            <div class="value ${cronFail > 0 ? 'red' : 'green'}">${cronFail > 0 ? cronFail + ' failed' : 'All OK'}</div>
+            <div class="sub">${cronOk} successful runs</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">Event Breakdown</div>
+          <table>
+            <thead><tr><th>Event Type</th><th>Count</th></tr></thead>
+            <tbody>
+              ${Object.entries(s.events || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
+                `<tr><td>${k}</td><td>${v}</td></tr>`
+              ).join('') || '<tr><td colspan="2" style="color:var(--text2)">No events yet</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderSessions() {
+      if (needsConfig()) return renderSettings();
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <h2>Sessions</h2>
+          ${periodSelector()}
+        </div>
+        <div id="sessions-content"><div class="loading">Loading sessions...</div></div>
+      `;
+    }
+
+    function renderCosts() {
+      if (needsConfig()) return renderSettings();
+      const s = state.stats;
+      if (!s) return '<div class="loading">Loading...</div>';
+
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <h2>Costs</h2>
+          ${periodSelector()}
+        </div>
+        <div class="grid">
+          <div class="card">
+            <div class="label">Total Spend</div>
+            <div class="value ${s.cost?.usd > 10 ? 'red' : 'green'}">$${(s.cost?.usd || 0).toFixed(2)}</div>
+            <div class="sub">Last ${state.period}</div>
+          </div>
+          <div class="card">
+            <div class="label">Total Tokens</div>
+            <div class="value">${formatNum(s.cost?.tokens || 0)}</div>
+          </div>
+          <div class="card">
+            <div class="label">Cost Events</div>
+            <div class="value">${s.events?.cost || 0}</div>
+          </div>
+        </div>
+        <div id="cost-chart-container"></div>
+      `;
+    }
+
+    function renderCron() {
+      if (needsConfig()) return renderSettings();
+      const s = state.stats;
+      if (!s) return '<div class="loading">Loading...</div>';
+
+      const cronJobs = s.cron_health || [];
+      // Group by job name
+      const jobs = {};
+      cronJobs.forEach(j => {
+        if (!jobs[j.job]) jobs[j.job] = { ok: 0, fail: 0 };
+        if (j.status === 'ok') jobs[j.job].ok = j.count;
+        else jobs[j.job].fail += j.count;
+      });
+
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <h2>Cron Jobs</h2>
+          ${periodSelector()}
+        </div>
+        <div class="panel">
+          <div class="panel-header">Job Health (${state.period})</div>
+          <table>
+            <thead><tr><th>Job</th><th>Successful</th><th>Failed</th><th>Status</th></tr></thead>
+            <tbody>
+              ${Object.entries(jobs).map(([name, j]) =>
+                `<tr>
+                  <td><strong>${name}</strong></td>
+                  <td>${j.ok}</td>
+                  <td>${j.fail}</td>
+                  <td><span class="badge ${j.fail > 0 ? 'fail' : 'ok'}">${j.fail > 0 ? 'ISSUES' : 'HEALTHY'}</span></td>
+                </tr>`
+              ).join('') || '<tr><td colspan="4" style="color:var(--text2)">No cron data yet</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    async function renderEvents() {
+      if (needsConfig()) return renderSettings();
+      const content = document.getElementById('content');
+      content.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <h2>Event Stream</h2>
+          ${periodSelector()}
+        </div>
+        <div class="panel">
+          <div class="panel-header">Recent Events</div>
+          <div class="event-stream" id="event-stream"><div class="loading">Loading...</div></div>
+        </div>
+      `;
+
+      const events = await fetchEvents(null, 100);
+      const stream = document.getElementById('event-stream');
+      if (!events.length) {
+        stream.innerHTML = '<div class="empty"><h3>No events yet</h3><p>Connect your agent with the SDK to start seeing events here.</p></div>';
+        return;
+      }
+
+      stream.innerHTML = events.map(e => {
+        const ts = new Date(e.ts * 1000).toLocaleTimeString();
+        const detail = e.session_key ? `session: ${e.session_key}` : JSON.stringify(e.data).slice(0, 80);
+        return `<div class="event-row">
+          <span class="ts">${ts}</span>
+          <span class="kind">${e.kind}</span>
+          <span class="detail">${detail}</span>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Helpers ──────────────────────────────────────────────
+    function formatNum(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return n.toString();
+    }
+
+    // ── Navigation ──────────────────────────────────────────
+    async function setView(view) {
+      state.view = view;
+      document.querySelectorAll('.sidebar nav a').forEach(a => {
+        a.classList.toggle('active', a.dataset.view === view);
+      });
+
+      if (!needsConfig() && view !== 'settings') {
+        await fetchStats();
+      }
+
+      const content = document.getElementById('content');
+      switch (view) {
+        case 'overview': content.innerHTML = renderOverview(); break;
+        case 'sessions': content.innerHTML = renderSessions(); loadSessions(); break;
+        case 'costs': content.innerHTML = renderCosts(); break;
+        case 'cron': content.innerHTML = renderCron(); break;
+        case 'events': await renderEvents(); break;
+        case 'settings': content.innerHTML = renderSettings(); break;
+      }
+    }
+
+    async function loadSessions() {
+      const events = await fetchEvents('session_start', 50);
+      const el = document.getElementById('sessions-content');
+      if (!el) return;
+      if (!events.length) {
+        el.innerHTML = '<div class="empty"><h3>No sessions yet</h3><p>Sessions appear when your agent reports session_start events.</p></div>';
+        return;
+      }
+      el.innerHTML = `<div class="panel"><table>
+        <thead><tr><th>Session</th><th>Started</th><th>Details</th></tr></thead>
+        <tbody>${events.map(e => `<tr>
+          <td><strong>${e.session_key || e.data?.session || '—'}</strong></td>
+          <td>${new Date(e.ts * 1000).toLocaleString()}</td>
+          <td style="color:var(--text2)">${e.data?.model || ''} ${e.data?.channel || ''}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    }
+
+    function setPeriod(p) {
+      state.period = p;
+      setView(state.view);
+    }
+
+    function saveConfig() {
+      state.apiUrl = document.getElementById('cfg-url').value.replace(/\/$/, '');
+      state.apiKey = document.getElementById('cfg-key').value;
+      localStorage.setItem('ap_api_url', state.apiUrl);
+      localStorage.setItem('ap_api_key', state.apiKey);
+      setView('overview');
+    }
+
+    // ── Init ────────────────────────────────────────────────
+    document.querySelectorAll('.sidebar nav a').forEach(a => {
+      a.addEventListener('click', (e) => { e.preventDefault(); setView(a.dataset.view); });
+    });
+
+    // ── Demo Mode ─────────────────────────────────────────
+    function enableDemo() {
+      state.apiUrl = 'demo';
+      state.apiKey = 'demo';
+      // Monkey-patch api() to return fake data
+      window._realApi = api;
+      window.api = async (path, params = {}) => {
+        if (path === '/v1/stats') return {
+          period: state.period,
+          events: { session_start: 47, cost: 312, heartbeat: 1440, cron: 88, memory: 24, alert: 3 },
+          cost: { usd: state.period === '7d' ? 28.45 : state.period === '30d' ? 112.30 : 4.12, tokens: state.period === '7d' ? 2840000 : state.period === '30d' ? 11200000 : 412000 },
+          cron_health: [
+            { job: 'memory-consolidation', status: 'ok', count: state.period === '7d' ? 7 : 1 },
+            { job: 'session-cleanup', status: 'ok', count: state.period === '7d' ? 84 : 12 },
+            { job: 'builder-agent', status: 'ok', count: state.period === '7d' ? 12 : 2 },
+            { job: 'builder-agent', status: 'fail', count: 1 },
+            { job: 'research-agent', status: 'ok', count: state.period === '7d' ? 7 : 1 },
+            { job: 'horror-content', status: 'ok', count: state.period === '7d' ? 21 : 3 },
+          ],
+        };
+        if (path === '/v1/events') {
+          const now = Date.now() / 1000;
+          return { events: Array.from({ length: 20 }, (_, i) => ({
+            id: i + 1, kind: ['cost', 'session_start', 'heartbeat', 'cron', 'memory'][i % 5],
+            ts: now - i * 300, session_key: `agent:main:${i % 3 === 0 ? 'main' : 'cron-' + i}`,
+            data: { model: 'claude-opus-4-6', tokens: 5000 + i * 100, cost_usd: 0.12 + i * 0.01 },
+          })), count: 20 };
+        }
+        return null;
+      };
+      // Also patch fetchStats and fetchEvents
+      window._realFetchStats = fetchStats;
+      fetchStats = async () => { state.stats = await window.api('/v1/stats', { period: state.period }); };
+      window._realFetchEvents = fetchEvents;
+      fetchEvents = async (kind, limit) => { const d = await window.api('/v1/events', {}); return d?.events || []; };
+      setView('overview');
+    }
+
+    // Check for ?demo query param
+    if (new URLSearchParams(location.search).has('demo')) {
+      enableDemo();
+    } else {
+      // Auto-refresh every 30s
+      setView(needsConfig() ? 'settings' : 'overview');
+      state.refreshInterval = setInterval(() => {
+        if (!needsConfig() && state.view !== 'settings') setView(state.view);
+      }, 30000);
+    }
+  </script>
+</body>
+</html>

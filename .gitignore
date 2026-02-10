@@ -1,0 +1,9 @@
+sdk-python/dist/
+api/agentpulse.db*
+__pycache__/
+node_modules/
+sdk-python/dist/
+*.db
+*.db-shm
+*.db-wal
+__pycache__/

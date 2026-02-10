@@ -1,0 +1,11 @@
+name = "agentpulse-api"
+main = "src/index.ts"
+compatibility_date = "2026-02-06"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "agentpulse"
+database_id = "placeholder-create-with-wrangler"
+
+[vars]
+CORS_ORIGIN = "*"
