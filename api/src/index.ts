@@ -55,6 +55,26 @@ export default {
       return json({ status: "ok", version: "0.1.0" }, 200, env);
     }
 
+    // ── POST /v1/register (no auth) ────────────────────────
+    if (path === "/v1/register" && req.method === "POST") {
+      const body = (await req.json()) as { name: string; email?: string };
+      if (!body.name || body.name.length < 2) {
+        return json({ error: "Name required (min 2 chars)" }, 400, env);
+      }
+      const key = "ap_" + crypto.randomUUID().replace(/-/g, "");
+      try {
+        await env.DB.prepare(
+          "INSERT INTO agents (name, api_key, email, plan) VALUES (?, ?, ?, 'free')"
+        ).bind(body.name, key, body.email || null).run();
+        return json({ name: body.name, api_key: key, plan: "free" }, 201, env);
+      } catch (e: any) {
+        if (e.message?.includes("UNIQUE")) {
+          return json({ error: "Name or email already registered" }, 409, env);
+        }
+        return json({ error: "Registration failed" }, 500, env);
+      }
+    }
+
     // Auth required for everything else
     const apiKey = extractKey(req);
     if (!apiKey) {
@@ -154,6 +174,29 @@ export default {
         cost: { usd: (costData as any)?.cost || 0, tokens: (costData as any)?.tokens || 0 },
         cron_health: cronHealth.results,
       }, 200, env);
+    }
+
+    // ── GET /v1/sessions ─────────────────────────────────────
+    if (path === "/v1/sessions" && req.method === "GET") {
+      const since = url.searchParams.get("since") || String(Date.now() / 1000 - 86400);
+      const rows = await env.DB.prepare(
+        "SELECT session_key, MIN(ts) as started, MAX(ts) as last_active, COUNT(*) as events " +
+        "FROM events WHERE agent_id = ? AND session_key IS NOT NULL AND ts >= ? " +
+        "GROUP BY session_key ORDER BY last_active DESC"
+      ).bind(agent.id, parseFloat(since)).all();
+      return json({ sessions: rows.results }, 200, env);
+    }
+
+    // ── GET /v1/crons ───────────────────────────────────────
+    if (path === "/v1/crons" && req.method === "GET") {
+      const rows = await env.DB.prepare(
+        "SELECT json_extract(data, '$.job') as job, kind, ts, " +
+        "json_extract(data, '$.status') as status, " +
+        "json_extract(data, '$.duration_ms') as duration_ms " +
+        "FROM events WHERE agent_id = ? AND kind = 'cron' " +
+        "ORDER BY ts DESC LIMIT 50"
+      ).bind(agent.id).all();
+      return json({ crons: rows.results }, 200, env);
     }
 
     return json({ error: "Not found" }, 404, env);

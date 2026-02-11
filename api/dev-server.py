@@ -137,14 +137,24 @@ class Handler(BaseHTTPRequestHandler):
                 (aid, since),
             ).fetchone()
 
+            # Cron health aggregation
+            cron_health_rows = self.conn.execute(
+                "SELECT json_extract(data, '$.job') as job, json_extract(data, '$.status') as status, COUNT(*) as count "
+                "FROM events WHERE agent_id = ? AND kind = 'cron' AND ts > ? "
+                "GROUP BY job, status",
+                (aid, since),
+            ).fetchall()
+            cron_health = [{"job": r["job"], "status": r["status"], "count": r["count"]} for r in cron_health_rows]
+
             self._json({
                 "period": period,
                 "total_events": total,
-                "by_kind": {r["kind"]: r["c"] for r in by_kind},
+                "events": {r["kind"]: r["c"] for r in by_kind},
                 "cost": {
-                    "total": costs["total_cost"] or 0,
+                    "usd": costs["total_cost"] or 0,
                     "tokens": costs["total_tokens"] or 0,
                 },
+                "cron_health": cron_health,
             })
 
         elif path == "/v1/sessions":
@@ -175,13 +185,33 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length)) if length else {}
+
+        # Register — no auth required
+        if path == "/v1/register":
+            name = body.get("name", "")
+            if len(name) < 2:
+                self._json({"error": "Name required (min 2 chars)"}, 400)
+                return
+            email = body.get("email")
+            key = "ap_" + secrets.token_hex(16)
+            try:
+                self.conn.execute(
+                    "INSERT INTO agents (name, api_key, email, plan) VALUES (?, ?, ?, 'free')",
+                    (name, key, email),
+                )
+                self.conn.commit()
+                self._json({"name": name, "api_key": key, "plan": "free"}, 201)
+            except sqlite3.IntegrityError:
+                self._json({"error": "Name or email already registered"}, 409)
+            return
+
+        # Auth required below
         agent = self._auth()
         if not agent:
             self._json({"error": "Unauthorized"}, 401)
             return
-
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length)) if length else {}
 
         if path == "/v1/ingest":
             events = body.get("events", [])
