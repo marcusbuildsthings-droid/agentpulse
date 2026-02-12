@@ -23,6 +23,7 @@ Lightweight monitoring for indie AI agents. Your agent's vital signs.
 - [x] Self-registration endpoint (POST /v1/register — no auth needed)
 - [x] Sessions + Crons dedicated endpoints on CF Worker
 - [x] Deploy guide (docs/DEPLOY.md)
+- [x] Alerting system — CRUD rules, webhook delivery, dashboard UI, dedup (1h cooldown)
 
 ### Architecture
 ```
@@ -37,6 +38,7 @@ Agent → SDK (Python/Node) → API (CF Workers) → D1 (SQLite) → Dashboard
 - **2026-02-09:** Local dev server (api/dev-server.py) — full API parity with CF Worker, SQLite backend, auto-creates agent on first run. Tested: 11 real events ingested from OpenClaw.
 - **2026-02-09:** OpenClaw dogfood reporter
 - **2026-02-10:** Python SDK published to PyPI as `agentpulse-sdk`. GitHub repo pushed (clean, no node_modules). PyPI name `agentpulse` was taken, using `agentpulse-sdk` instead. (dogfood/openclaw-reporter.py) — collects sessions, costs, crons, memory health from marcus-* tools and reports to AgentPulse API. Verified working end-to-end.
+- **2026-02-12:** Alerting system: API endpoints (GET/POST/PATCH/DELETE /v1/alerts, GET /v1/alerts/history), alert evaluation engine (runs on ingest, evaluates daily_cost/daily_tokens/daily_events/cron_fail_count/cron_fail_streak), webhook delivery, 1h dedup cooldown, alert_fired events logged. Dashboard alerts view with create/toggle/delete UI + firing history.
 - **2026-02-11:** Dashboard→API integration fixed (aligned stats response fields: `events`, `cost.usd`, `cron_health`). Added self-registration endpoint (POST /v1/register). Added /v1/sessions and /v1/crons to CF Worker. Deploy guide (docs/DEPLOY.md). Tested full flow: dev server → ingest → stats → dashboard renders correctly.
 
 ## Structure

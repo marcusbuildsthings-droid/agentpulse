@@ -18,6 +18,14 @@ interface IngestPayload {
   }>;
 }
 
+const MAX_BODY_SIZE = 256 * 1024; // 256KB
+
+// SHA-256 hash helper
+async function sha256(input: string): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 // Simple API key validation (prefix: ap_)
 function extractKey(req: Request): string | null {
   const auth = req.headers.get("Authorization") || "";
@@ -35,19 +43,180 @@ const PLAN_LIMITS: Record<string, { eventsPerDay: number; maxBatchSize: number; 
 const registerAttempts = new Map<string, { count: number; resetAt: number }>();
 const REGISTER_LIMIT = 5; // per hour per IP
 
-function cors(env: Env): Record<string, string> {
+function cors(req: Request, env: Env): Record<string, string> {
+  const origin = req.headers.get("Origin") || "";
+  const allowed = env.CORS_ORIGIN.split(",").map(s => s.trim());
+  const matched = allowed.includes(origin) ? origin : "";
   return {
-    "Access-Control-Allow-Origin": env.CORS_ORIGIN,
+    "Access-Control-Allow-Origin": matched,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Vary": "Origin",
   };
 }
 
-function json(data: unknown, status = 200, env?: Env): Response {
+function json(data: unknown, status = 200, req?: Request, env?: Env): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", ...(env ? cors(env) : {}) },
+    headers: { "Content-Type": "application/json", ...(req && env ? cors(req, env) : {}) },
   });
+}
+
+// Check body size from Content-Length header
+function checkBodySize(req: Request): boolean {
+  const cl = parseInt(req.headers.get("Content-Length") || "0");
+  return cl > MAX_BODY_SIZE;
+}
+
+// Read body with size enforcement
+async function readBody<T>(req: Request): Promise<T | null> {
+  const reader = req.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalSize += value.byteLength;
+    if (totalSize > MAX_BODY_SIZE) return null;
+    chunks.push(value);
+  }
+  const combined = new Uint8Array(totalSize);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(combined)) as T;
+}
+
+// Validate event kind: alphanumeric + underscore only
+function isValidKind(kind: string): boolean {
+  return typeof kind === "string" && /^[a-zA-Z0-9_]+$/.test(kind) && kind.length <= 64;
+}
+
+// Validate timestamp: reasonable range (2020-01-01 to now + 1 day)
+function isValidTs(ts: unknown): ts is number {
+  if (typeof ts !== "number" || !Number.isFinite(ts)) return false;
+  const min = 1577836800; // 2020-01-01
+  const max = Date.now() / 1000 + 86400; // +1 day
+  return ts >= min && ts <= max;
+}
+
+// ── Alert Evaluation Engine ──────────────────────────────
+// Fire-and-forget: runs after ingest, doesn't block response
+function ctx_evaluateAlerts(env: Env, agentId: number, events: IngestPayload["events"]) {
+  // Use waitUntil pattern — but since we don't have ctx here, we just fire async
+  evaluateAlerts(env, agentId, events).catch(() => {});
+}
+
+async function evaluateAlerts(env: Env, agentId: number, events: IngestPayload["events"]) {
+  const rules = await env.DB.prepare(
+    "SELECT id, rule_name, condition, channel, webhook_url FROM alerts WHERE agent_id = ? AND enabled = 1"
+  ).bind(agentId).all();
+
+  if (!rules.results.length) return;
+
+  for (const rule of rules.results) {
+    const cond = JSON.parse(rule.condition as string) as { metric: string; op: string; threshold: number };
+    let currentValue: number | null = null;
+
+    switch (cond.metric) {
+      case "daily_cost": {
+        const row = await env.DB.prepare(
+          "SELECT total_cost as val FROM cost_daily WHERE agent_id = ? AND date = date('now')"
+        ).bind(agentId).first<{ val: number }>();
+        currentValue = row?.val ?? 0;
+        break;
+      }
+      case "daily_tokens": {
+        const row = await env.DB.prepare(
+          "SELECT total_tokens as val FROM cost_daily WHERE agent_id = ? AND date = date('now')"
+        ).bind(agentId).first<{ val: number }>();
+        currentValue = row?.val ?? 0;
+        break;
+      }
+      case "daily_events": {
+        const row = await env.DB.prepare(
+          "SELECT COUNT(*) as val FROM events WHERE agent_id = ? AND ts >= ?"
+        ).bind(agentId, Date.now() / 1000 - 86400).first<{ val: number }>();
+        currentValue = row?.val ?? 0;
+        break;
+      }
+      case "cron_fail_count": {
+        const cronFails = events.filter(e => e.kind === "cron" && (e.data as any)?.status === "fail");
+        if (cronFails.length === 0) continue; // Only evaluate when cron events come in
+        const row = await env.DB.prepare(
+          "SELECT COUNT(*) as val FROM events WHERE agent_id = ? AND kind = 'cron' AND json_extract(data, '$.status') = 'fail' AND ts >= ?"
+        ).bind(agentId, Date.now() / 1000 - 86400).first<{ val: number }>();
+        currentValue = row?.val ?? 0;
+        break;
+      }
+      case "cron_fail_streak": {
+        const cronEvents = events.filter(e => e.kind === "cron");
+        if (cronEvents.length === 0) continue;
+        // Check last N cron events for consecutive failures
+        const recent = await env.DB.prepare(
+          "SELECT json_extract(data, '$.status') as status FROM events WHERE agent_id = ? AND kind = 'cron' ORDER BY ts DESC LIMIT 10"
+        ).bind(agentId).all();
+        let streak = 0;
+        for (const r of recent.results) {
+          if ((r as any).status === "fail") streak++;
+          else break;
+        }
+        currentValue = streak;
+        break;
+      }
+    }
+
+    if (currentValue === null) continue;
+
+    let triggered = false;
+    switch (cond.op) {
+      case "gt": triggered = currentValue > cond.threshold; break;
+      case "gte": triggered = currentValue >= cond.threshold; break;
+      case "lt": triggered = currentValue < cond.threshold; break;
+      case "lte": triggered = currentValue <= cond.threshold; break;
+      case "eq": triggered = currentValue === cond.threshold; break;
+    }
+
+    if (!triggered) continue;
+
+    // Deduplicate: don't fire same rule more than once per hour
+    const recentFire = await env.DB.prepare(
+      "SELECT id FROM events WHERE agent_id = ? AND kind = 'alert_fired' AND json_extract(data, '$.rule_id') = ? AND ts >= ?"
+    ).bind(agentId, rule.id, Date.now() / 1000 - 3600).first();
+    if (recentFire) continue;
+
+    // Log the fired alert as an event
+    const alertData = {
+      rule_id: rule.id,
+      rule_name: rule.rule_name,
+      metric: cond.metric,
+      value: currentValue,
+      threshold: cond.threshold,
+      op: cond.op,
+    };
+    await env.DB.prepare(
+      "INSERT INTO events (agent_id, kind, ts, data) VALUES (?, 'alert_fired', ?, ?)"
+    ).bind(agentId, Date.now() / 1000, JSON.stringify(alertData)).run();
+
+    // Deliver webhook
+    if (rule.channel === "webhook" && rule.webhook_url) {
+      fetch(rule.webhook_url as string, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "agentpulse",
+          alert: rule.rule_name,
+          metric: cond.metric,
+          value: currentValue,
+          threshold: cond.threshold,
+          fired_at: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+    }
+  }
 }
 
 export default {
@@ -57,22 +226,27 @@ export default {
 
     // CORS preflight
     if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: cors(env) });
+      return new Response(null, { status: 204, headers: cors(req, env) });
     }
 
     // Health check (no auth)
     if (path === "/v1/health" && req.method === "GET") {
-      return json({ status: "ok", version: "0.1.0" }, 200, env);
+      return json({ status: "ok", version: "0.1.0" }, 200, req, env);
     }
 
     // ── POST /v1/register (no auth, rate-limited) ──────────
     if (path === "/v1/register" && req.method === "POST") {
+      // Body size check
+      if (checkBodySize(req)) {
+        return json({ error: "Request too large" }, 413, req, env);
+      }
+
       // Rate limit by IP
       const ip = req.headers.get("CF-Connecting-IP") || "unknown";
       const now = Date.now();
       const attempt = registerAttempts.get(ip);
       if (attempt && attempt.resetAt > now && attempt.count >= REGISTER_LIMIT) {
-        return json({ error: "Too many registrations. Try again later." }, 429, env);
+        return json({ error: "Too many registrations. Try again later." }, 429, req, env);
       }
       if (!attempt || attempt.resetAt <= now) {
         registerAttempts.set(ip, { count: 1, resetAt: now + 3600_000 });
@@ -80,50 +254,87 @@ export default {
         attempt.count++;
       }
 
-      const body = (await req.json()) as { name: string; email?: string };
-      if (!body.name || body.name.length < 2) {
-        return json({ error: "Name required (min 2 chars)" }, 400, env);
+      const body = await readBody<{ name: string; email?: string }>(req);
+      if (!body) {
+        return json({ error: "Invalid or oversized request body" }, 400, req, env);
       }
-      const key = "ap_" + crypto.randomUUID().replace(/-/g, "");
+      if (!body.name || body.name.length < 2) {
+        return json({ error: "Name required (min 2 chars)" }, 400, req, env);
+      }
+
+      // Generate key, store hash
+      const raw = "ap_" + crypto.randomUUID().replace(/-/g, "");
+      const keyHash = await sha256(raw);
+
       try {
         await env.DB.prepare(
-          "INSERT INTO agents (name, api_key, email, plan) VALUES (?, ?, ?, 'free')"
-        ).bind(body.name, key, body.email || null).run();
-        return json({ name: body.name, api_key: key, plan: "free" }, 201, env);
+          "INSERT INTO agents (name, api_key_hash, email, plan) VALUES (?, ?, ?, 'free')"
+        ).bind(body.name, keyHash, body.email || null).run();
+        return json({ name: body.name, api_key: raw, plan: "free" }, 201, req, env);
       } catch (e: any) {
         if (e.message?.includes("UNIQUE")) {
-          return json({ error: "Name or email already registered" }, 409, env);
+          return json({ error: "Name or email already registered" }, 409, req, env);
         }
-        return json({ error: "Registration failed" }, 500, env);
+        return json({ error: "Registration failed" }, 500, req, env);
       }
     }
 
     // Auth required for everything else
     const apiKey = extractKey(req);
     if (!apiKey) {
-      return json({ error: "Missing or invalid API key" }, 401, env);
+      return json({ error: "Missing or invalid API key" }, 401, req, env);
     }
 
-    // Look up agent by API key
-    const agent = await env.DB.prepare("SELECT id, name FROM agents WHERE api_key = ?").bind(apiKey).first<{ id: number; name: string }>();
+    // Look up agent by hashed API key
+    const keyHash = await sha256(apiKey);
+    const agent = await env.DB.prepare("SELECT id, name FROM agents WHERE api_key_hash = ?").bind(keyHash).first<{ id: number; name: string }>();
     if (!agent) {
-      return json({ error: "Invalid API key" }, 403, env);
+      return json({ error: "Invalid API key" }, 403, req, env);
     }
 
     // ── POST /v1/ingest (rate-limited per plan) ────────────
     if (path === "/v1/ingest" && req.method === "POST") {
-      const body = (await req.json()) as IngestPayload;
+      // Body size check
+      if (checkBodySize(req)) {
+        return json({ error: "Request too large" }, 413, req, env);
+      }
+
+      const body = await readBody<IngestPayload>(req);
+      if (!body) {
+        return json({ error: "Invalid or oversized request body" }, 400, req, env);
+      }
       if (!body.events?.length) {
-        return json({ error: "No events" }, 400, env);
+        return json({ error: "No events" }, 400, req, env);
+      }
+
+      // Hard cap: 500 events per batch regardless of plan
+      if (body.events.length > 500) {
+        return json({ error: "Max 500 events per batch" }, 413, req, env);
+      }
+
+      // Validate each event
+      for (const e of body.events) {
+        if (!isValidKind(e.kind)) {
+          return json({ error: `Invalid event kind: must be alphanumeric/underscore, max 64 chars` }, 400, req, env);
+        }
+        if (!isValidTs(e.ts)) {
+          return json({ error: "Invalid timestamp: must be a reasonable unix timestamp" }, 400, req, env);
+        }
+        if (e.data !== null && e.data !== undefined && typeof e.data !== "object") {
+          return json({ error: "Event data must be an object" }, 400, req, env);
+        }
+        if (e.session && (typeof e.session !== "string" || e.session.length > 256)) {
+          return json({ error: "Session key too long (max 256 chars)" }, 400, req, env);
+        }
       }
 
       // Look up plan limits
       const agentPlan = await env.DB.prepare("SELECT plan FROM agents WHERE id = ?").bind(agent.id).first<{ plan: string }>();
       const limits = PLAN_LIMITS[(agentPlan?.plan) || "free"] || PLAN_LIMITS.free;
 
-      // Enforce batch size
+      // Enforce batch size per plan
       if (body.events.length > limits.maxBatchSize) {
-        return json({ error: `Batch too large. Max ${limits.maxBatchSize} events per request on ${agentPlan?.plan || "free"} plan.` }, 413, env);
+        return json({ error: `Batch too large. Max ${limits.maxBatchSize} events per request on ${agentPlan?.plan || "free"} plan.` }, 413, req, env);
       }
 
       // Check daily event count
@@ -132,7 +343,7 @@ export default {
       ).bind(agent.id, Date.now() / 1000 - 86400).first<{ cnt: number }>();
 
       if ((todayCount?.cnt || 0) + body.events.length > limits.eventsPerDay) {
-        return json({ error: `Daily event limit reached (${limits.eventsPerDay} events/day on ${agentPlan?.plan || "free"} plan). Upgrade for higher limits.` }, 429, env);
+        return json({ error: `Daily event limit reached (${limits.eventsPerDay} events/day on ${agentPlan?.plan || "free"} plan). Upgrade for higher limits.` }, 429, req, env);
       }
 
       const stmt = env.DB.prepare(
@@ -159,7 +370,96 @@ export default {
         ).bind(agent.id, totalCost, totalTokens, costEvents.length).run();
       }
 
-      return json({ accepted: body.events.length }, 200, env);
+      // ── Evaluate alert rules after ingest ──────────────────
+      ctx_evaluateAlerts(env, agent.id, body.events);
+
+      return json({ accepted: body.events.length }, 200, req, env);
+    }
+
+    // ── Alert Rules CRUD ────────────────────────────────────
+    if (path === "/v1/alerts" && req.method === "GET") {
+      const rows = await env.DB.prepare(
+        "SELECT id, rule_name, condition, channel, webhook_url, enabled, created_at FROM alerts WHERE agent_id = ? ORDER BY created_at DESC"
+      ).bind(agent.id).all();
+      const alerts = rows.results.map((r: any) => ({ ...r, condition: JSON.parse(r.condition) }));
+      return json({ alerts }, 200, req, env);
+    }
+
+    if (path === "/v1/alerts" && req.method === "POST") {
+      if (checkBodySize(req)) return json({ error: "Request too large" }, 413, req, env);
+      const body = await readBody<{
+        rule_name: string;
+        condition: { metric: string; op: string; threshold: number; window?: string };
+        channel?: string;
+        webhook_url?: string;
+      }>(req);
+      if (!body || !body.rule_name || !body.condition) {
+        return json({ error: "rule_name and condition required" }, 400, req, env);
+      }
+      const { metric, op, threshold } = body.condition;
+      if (!metric || !op || threshold === undefined) {
+        return json({ error: "condition needs metric, op, threshold" }, 400, req, env);
+      }
+      const validOps = ["gt", "gte", "lt", "lte", "eq"];
+      if (!validOps.includes(op)) {
+        return json({ error: `op must be one of: ${validOps.join(", ")}` }, 400, req, env);
+      }
+      const validMetrics = ["daily_cost", "daily_tokens", "daily_events", "cron_fail_count", "cron_fail_streak"];
+      if (!validMetrics.includes(metric)) {
+        return json({ error: `metric must be one of: ${validMetrics.join(", ")}` }, 400, req, env);
+      }
+      const ch = body.channel || "webhook";
+      if (ch === "webhook" && !body.webhook_url) {
+        return json({ error: "webhook_url required for webhook channel" }, 400, req, env);
+      }
+      // Limit: max 10 alert rules per agent on free plan
+      const count = await env.DB.prepare("SELECT COUNT(*) as cnt FROM alerts WHERE agent_id = ?").bind(agent.id).first<{ cnt: number }>();
+      if ((count?.cnt || 0) >= 10) {
+        return json({ error: "Max 10 alert rules" }, 429, req, env);
+      }
+      const result = await env.DB.prepare(
+        "INSERT INTO alerts (agent_id, rule_name, condition, channel, webhook_url) VALUES (?, ?, ?, ?, ?)"
+      ).bind(agent.id, body.rule_name, JSON.stringify(body.condition), ch, body.webhook_url || null).run();
+      return json({ id: result.meta.last_row_id, rule_name: body.rule_name, created: true }, 201, req, env);
+    }
+
+    // DELETE /v1/alerts/:id
+    const alertDeleteMatch = path.match(/^\/v1\/alerts\/(\d+)$/);
+    if (alertDeleteMatch && req.method === "DELETE") {
+      const alertId = parseInt(alertDeleteMatch[1]);
+      const deleted = await env.DB.prepare(
+        "DELETE FROM alerts WHERE id = ? AND agent_id = ?"
+      ).bind(alertId, agent.id).run();
+      if (deleted.meta.changes === 0) return json({ error: "Not found" }, 404, req, env);
+      return json({ deleted: true }, 200, req, env);
+    }
+
+    // PATCH /v1/alerts/:id (toggle enabled, update webhook, etc.)
+    const alertPatchMatch = path.match(/^\/v1\/alerts\/(\d+)$/);
+    if (alertPatchMatch && req.method === "PATCH") {
+      if (checkBodySize(req)) return json({ error: "Request too large" }, 413, req, env);
+      const alertId = parseInt(alertPatchMatch[1]);
+      const body = await readBody<{ enabled?: boolean; webhook_url?: string; rule_name?: string }>(req);
+      if (!body) return json({ error: "Invalid body" }, 400, req, env);
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      if (body.enabled !== undefined) { sets.push("enabled = ?"); params.push(body.enabled ? 1 : 0); }
+      if (body.webhook_url !== undefined) { sets.push("webhook_url = ?"); params.push(body.webhook_url); }
+      if (body.rule_name !== undefined) { sets.push("rule_name = ?"); params.push(body.rule_name); }
+      if (sets.length === 0) return json({ error: "Nothing to update" }, 400, req, env);
+      params.push(alertId, agent.id);
+      await env.DB.prepare(`UPDATE alerts SET ${sets.join(", ")} WHERE id = ? AND agent_id = ?`).bind(...params).run();
+      return json({ updated: true }, 200, req, env);
+    }
+
+    // GET /v1/alerts/history — fired alerts log
+    if (path === "/v1/alerts/history" && req.method === "GET") {
+      const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 200);
+      const rows = await env.DB.prepare(
+        "SELECT ts, data FROM events WHERE agent_id = ? AND kind = 'alert_fired' ORDER BY ts DESC LIMIT ?"
+      ).bind(agent.id, limit).all();
+      const history = rows.results.map((r: any) => ({ ts: r.ts, ...JSON.parse(r.data) }));
+      return json({ history }, 200, req, env);
     }
 
     // ── GET /v1/events ──────────────────────────────────────
@@ -185,7 +485,7 @@ export default {
         data: JSON.parse(r.data as string),
       }));
 
-      return json({ events, count: events.length }, 200, env);
+      return json({ events, count: events.length }, 200, req, env);
     }
 
     // ── GET /v1/stats ───────────────────────────────────────
@@ -214,7 +514,7 @@ export default {
         events: Object.fromEntries(eventCounts.results.map((r: any) => [r.kind, r.count])),
         cost: { usd: (costData as any)?.cost || 0, tokens: (costData as any)?.tokens || 0 },
         cron_health: cronHealth.results,
-      }, 200, env);
+      }, 200, req, env);
     }
 
     // ── GET /v1/sessions ─────────────────────────────────────
@@ -225,7 +525,7 @@ export default {
         "FROM events WHERE agent_id = ? AND session_key IS NOT NULL AND ts >= ? " +
         "GROUP BY session_key ORDER BY last_active DESC"
       ).bind(agent.id, parseFloat(since)).all();
-      return json({ sessions: rows.results }, 200, env);
+      return json({ sessions: rows.results }, 200, req, env);
     }
 
     // ── GET /v1/mailbox ──────────────────────────────────────
@@ -242,7 +542,7 @@ export default {
         "FROM events WHERE agent_id = ? AND kind = 'mailbox' AND ts >= ? " +
         "ORDER BY ts DESC LIMIT ?"
       ).bind(agent.id, parseFloat(since), limit).all();
-      return json({ messages: rows.results, count: rows.results.length }, 200, env);
+      return json({ messages: rows.results, count: rows.results.length }, 200, req, env);
     }
 
     // ── GET /v1/crons ───────────────────────────────────────
@@ -254,10 +554,10 @@ export default {
         "FROM events WHERE agent_id = ? AND kind = 'cron' " +
         "ORDER BY ts DESC LIMIT 50"
       ).bind(agent.id).all();
-      return json({ crons: rows.results }, 200, env);
+      return json({ crons: rows.results }, 200, req, env);
     }
 
-    return json({ error: "Not found" }, 404, env);
+    return json({ error: "Not found" }, 404, req, env);
   },
 
   // Scheduled: retention cleanup (run daily via CF cron trigger)

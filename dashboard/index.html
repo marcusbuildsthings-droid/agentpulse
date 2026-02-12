@@ -113,6 +113,7 @@
         <a href="#" data-view="costs">💰 Costs</a>
         <a href="#" data-view="cron">⏰ Cron Jobs</a>
         <a href="#" data-view="events">📡 Events</a>
+        <a href="#" data-view="alerts">🔔 Alerts</a>
         <a href="#" data-view="settings">⚙️ Settings</a>
       </nav>
     </div>
@@ -122,6 +123,17 @@
   </div>
 
   <script>
+    // ── XSS Protection ────────────────────────────────────────
+    function esc(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     // ── State ────────────────────────────────────────────────
     const state = {
       apiUrl: localStorage.getItem('ap_api_url') || '',
@@ -166,9 +178,9 @@
         <h2>Settings</h2>
         <div class="config-panel">
           <label>API Endpoint</label>
-          <input id="cfg-url" type="url" placeholder="https://api.agentpulse.dev" value="${state.apiUrl}">
+          <input id="cfg-url" type="url" placeholder="https://api.agentpulse.dev" value="${esc(state.apiUrl)}">
           <label>API Key</label>
-          <input id="cfg-key" type="text" placeholder="ap_..." value="${state.apiKey}">
+          <input id="cfg-key" type="text" placeholder="ap_..." value="${esc(state.apiKey)}">
           <button onclick="saveConfig()">Save & Connect</button>
         </div>
       `;
@@ -231,7 +243,7 @@
             <thead><tr><th>Event Type</th><th>Count</th></tr></thead>
             <tbody>
               ${Object.entries(s.events || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
-                `<tr><td>${k}</td><td>${v}</td></tr>`
+                `<tr><td>${esc(k)}</td><td>${v}</td></tr>`
               ).join('') || '<tr><td colspan="2" style="color:var(--text2)">No events yet</td></tr>'}
             </tbody>
           </table>
@@ -305,7 +317,7 @@
             <tbody>
               ${Object.entries(jobs).map(([name, j]) =>
                 `<tr>
-                  <td><strong>${name}</strong></td>
+                  <td><strong>${esc(name)}</strong></td>
                   <td>${j.ok}</td>
                   <td>${j.fail}</td>
                   <td><span class="badge ${j.fail > 0 ? 'fail' : 'ok'}">${j.fail > 0 ? 'ISSUES' : 'HEALTHY'}</span></td>
@@ -342,11 +354,138 @@
         const ts = new Date(e.ts * 1000).toLocaleTimeString();
         const detail = e.session_key ? `session: ${e.session_key}` : JSON.stringify(e.data).slice(0, 80);
         return `<div class="event-row">
-          <span class="ts">${ts}</span>
-          <span class="kind">${e.kind}</span>
-          <span class="detail">${detail}</span>
+          <span class="ts">${esc(ts)}</span>
+          <span class="kind">${esc(e.kind)}</span>
+          <span class="detail">${esc(detail)}</span>
         </div>`;
       }).join('');
+    }
+
+    // ── Alerts View ─────────────────────────────────────────
+    async function renderAlerts() {
+      if (needsConfig()) { document.getElementById('content').innerHTML = renderSettings(); return; }
+      const content = document.getElementById('content');
+      content.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <h2>🔔 Alert Rules</h2>
+          <button onclick="showCreateAlert()" style="background:var(--accent);color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">+ New Rule</button>
+        </div>
+        <div id="create-alert-form" style="display:none;margin-bottom:20px" class="panel">
+          <div class="panel-header">Create Alert Rule</div>
+          <div style="padding:16px;display:grid;gap:12px">
+            <input id="a-name" placeholder="Rule name (e.g. Budget Alert)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:14px">
+            <div style="display:flex;gap:8px">
+              <select id="a-metric" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px">
+                <option value="daily_cost">Daily Cost ($)</option>
+                <option value="daily_tokens">Daily Tokens</option>
+                <option value="daily_events">Daily Events</option>
+                <option value="cron_fail_count">Cron Failures (24h)</option>
+                <option value="cron_fail_streak">Cron Fail Streak</option>
+              </select>
+              <select id="a-op" style="width:80px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px">
+                <option value="gt">&gt;</option>
+                <option value="gte">≥</option>
+                <option value="lt">&lt;</option>
+                <option value="lte">≤</option>
+                <option value="eq">=</option>
+              </select>
+              <input id="a-threshold" type="number" step="any" placeholder="Threshold" style="width:120px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px">
+            </div>
+            <input id="a-webhook" placeholder="Webhook URL (https://...)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:14px">
+            <div style="display:flex;gap:8px">
+              <button onclick="createAlert()" style="background:var(--green);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer">Create</button>
+              <button onclick="document.getElementById('create-alert-form').style.display='none'" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:6px;cursor:pointer">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">Active Rules</div>
+          <div id="alerts-list"><div class="loading">Loading...</div></div>
+        </div>
+        <div class="panel" style="margin-top:16px">
+          <div class="panel-header">Alert History</div>
+          <div id="alerts-history"><div class="loading">Loading...</div></div>
+        </div>
+      `;
+      await loadAlerts();
+      await loadAlertHistory();
+    }
+
+    window.showCreateAlert = () => { document.getElementById('create-alert-form').style.display = 'block'; };
+
+    window.createAlert = async () => {
+      const name = document.getElementById('a-name').value;
+      const metric = document.getElementById('a-metric').value;
+      const op = document.getElementById('a-op').value;
+      const threshold = parseFloat(document.getElementById('a-threshold').value);
+      const webhook_url = document.getElementById('a-webhook').value;
+      if (!name || isNaN(threshold)) { alert('Fill in name and threshold'); return; }
+      try {
+        const res = await fetch(state.apiUrl + '/v1/alerts', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.apiKey },
+          body: JSON.stringify({ rule_name: name, condition: { metric, op, threshold }, channel: 'webhook', webhook_url })
+        });
+        if (!res.ok) { const e = await res.json(); alert(e.error); return; }
+        document.getElementById('create-alert-form').style.display = 'none';
+        await loadAlerts();
+      } catch (e) { alert('Failed: ' + e.message); }
+    };
+
+    window.toggleAlert = async (id, enabled) => {
+      await fetch(state.apiUrl + '/v1/alerts/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.apiKey },
+        body: JSON.stringify({ enabled: !enabled })
+      });
+      await loadAlerts();
+    };
+
+    window.deleteAlert = async (id) => {
+      if (!confirm('Delete this alert rule?')) return;
+      await fetch(state.apiUrl + '/v1/alerts/' + id, {
+        method: 'DELETE', headers: { 'Authorization': 'Bearer ' + state.apiKey }
+      });
+      await loadAlerts();
+    };
+
+    async function loadAlerts() {
+      const el = document.getElementById('alerts-list');
+      try {
+        const res = await fetch(state.apiUrl + '/v1/alerts', { headers: { 'Authorization': 'Bearer ' + state.apiKey } });
+        const data = await res.json();
+        if (!data.alerts?.length) { el.innerHTML = '<div class="empty"><h3>No alert rules</h3><p>Create one to get notified about cost spikes, cron failures, and more.</p></div>'; return; }
+        const opSymbol = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
+        el.innerHTML = '<table style="width:100%"><thead><tr><th style="text-align:left;padding:12px 16px;color:var(--text2);font-size:12px">Rule</th><th style="text-align:left;padding:12px 16px;color:var(--text2);font-size:12px">Condition</th><th style="text-align:left;padding:12px 16px;color:var(--text2);font-size:12px">Delivery</th><th style="text-align:right;padding:12px 16px;color:var(--text2);font-size:12px">Actions</th></tr></thead><tbody>' +
+          data.alerts.map(a => {
+            const c = a.condition;
+            const statusColor = a.enabled ? 'var(--green)' : 'var(--text2)';
+            return `<tr style="border-top:1px solid var(--border)">
+              <td style="padding:12px 16px"><span style="color:${statusColor}">●</span> ${esc(a.rule_name)}</td>
+              <td style="padding:12px 16px;color:var(--text2);font-size:13px">${esc(c.metric)} ${opSymbol[c.op] || c.op} ${c.threshold}</td>
+              <td style="padding:12px 16px;color:var(--text2);font-size:13px">${esc(a.channel)}${a.webhook_url ? ' → ' + esc(a.webhook_url.slice(0, 40)) + '...' : ''}</td>
+              <td style="padding:12px 16px;text-align:right">
+                <button onclick="toggleAlert(${a.id}, ${a.enabled})" style="background:none;border:1px solid var(--border);color:var(--text2);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:4px">${a.enabled ? 'Disable' : 'Enable'}</button>
+                <button onclick="deleteAlert(${a.id})" style="background:none;border:1px solid var(--red);color:var(--red);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px">Delete</button>
+              </td>
+            </tr>`;
+          }).join('') + '</tbody></table>';
+      } catch { el.innerHTML = '<div class="empty">Failed to load alerts</div>'; }
+    }
+
+    async function loadAlertHistory() {
+      const el = document.getElementById('alerts-history');
+      try {
+        const res = await fetch(state.apiUrl + '/v1/alerts/history', { headers: { 'Authorization': 'Bearer ' + state.apiKey } });
+        const data = await res.json();
+        if (!data.history?.length) { el.innerHTML = '<div class="empty"><p>No alerts have fired yet.</p></div>'; return; }
+        el.innerHTML = data.history.map(h => {
+          const ts = new Date(h.ts * 1000).toLocaleString();
+          return `<div class="event-row">
+            <span class="ts">${esc(ts)}</span>
+            <span class="kind" style="color:var(--red)">🔴 ${esc(h.rule_name)}</span>
+            <span class="detail">${esc(h.metric)}: ${h.value} (threshold: ${h.threshold})</span>
+          </div>`;
+        }).join('');
+      } catch { el.innerHTML = '<div class="empty">Failed to load history</div>'; }
     }
 
     // ── Helpers ──────────────────────────────────────────────
@@ -374,6 +513,7 @@
         case 'costs': content.innerHTML = renderCosts(); break;
         case 'cron': content.innerHTML = renderCron(); break;
         case 'events': await renderEvents(); break;
+        case 'alerts': await renderAlerts(); break;
         case 'settings': content.innerHTML = renderSettings(); break;
       }
     }
@@ -389,9 +529,9 @@
       el.innerHTML = `<div class="panel"><table>
         <thead><tr><th>Session</th><th>Started</th><th>Details</th></tr></thead>
         <tbody>${events.map(e => `<tr>
-          <td><strong>${e.session_key || e.data?.session || '—'}</strong></td>
-          <td>${new Date(e.ts * 1000).toLocaleString()}</td>
-          <td style="color:var(--text2)">${e.data?.model || ''} ${e.data?.channel || ''}</td>
+          <td><strong>${esc(e.session_key || e.data?.session || '—')}</strong></td>
+          <td>${esc(new Date(e.ts * 1000).toLocaleString())}</td>
+          <td style="color:var(--text2)">${esc(e.data?.model || '')} ${esc(e.data?.channel || '')}</td>
         </tr>`).join('')}</tbody>
       </table></div>`;
     }
