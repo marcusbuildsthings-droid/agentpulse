@@ -25,6 +25,16 @@ function extractKey(req: Request): string | null {
   return null;
 }
 
+// Rate limits per plan
+const PLAN_LIMITS: Record<string, { eventsPerDay: number; maxBatchSize: number; retentionDays: number }> = {
+  free: { eventsPerDay: 5000, maxBatchSize: 100, retentionDays: 7 },
+  pro: { eventsPerDay: 100000, maxBatchSize: 500, retentionDays: 90 },
+};
+
+// In-memory register rate limit (by IP, resets on redeploy — good enough for spam prevention)
+const registerAttempts = new Map<string, { count: number; resetAt: number }>();
+const REGISTER_LIMIT = 5; // per hour per IP
+
 function cors(env: Env): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": env.CORS_ORIGIN,
@@ -55,8 +65,21 @@ export default {
       return json({ status: "ok", version: "0.1.0" }, 200, env);
     }
 
-    // ── POST /v1/register (no auth) ────────────────────────
+    // ── POST /v1/register (no auth, rate-limited) ──────────
     if (path === "/v1/register" && req.method === "POST") {
+      // Rate limit by IP
+      const ip = req.headers.get("CF-Connecting-IP") || "unknown";
+      const now = Date.now();
+      const attempt = registerAttempts.get(ip);
+      if (attempt && attempt.resetAt > now && attempt.count >= REGISTER_LIMIT) {
+        return json({ error: "Too many registrations. Try again later." }, 429, env);
+      }
+      if (!attempt || attempt.resetAt <= now) {
+        registerAttempts.set(ip, { count: 1, resetAt: now + 3600_000 });
+      } else {
+        attempt.count++;
+      }
+
       const body = (await req.json()) as { name: string; email?: string };
       if (!body.name || body.name.length < 2) {
         return json({ error: "Name required (min 2 chars)" }, 400, env);
@@ -87,18 +110,36 @@ export default {
       return json({ error: "Invalid API key" }, 403, env);
     }
 
-    // ── POST /v1/ingest ─────────────────────────────────────
+    // ── POST /v1/ingest (rate-limited per plan) ────────────
     if (path === "/v1/ingest" && req.method === "POST") {
       const body = (await req.json()) as IngestPayload;
       if (!body.events?.length) {
         return json({ error: "No events" }, 400, env);
       }
 
+      // Look up plan limits
+      const agentPlan = await env.DB.prepare("SELECT plan FROM agents WHERE id = ?").bind(agent.id).first<{ plan: string }>();
+      const limits = PLAN_LIMITS[(agentPlan?.plan) || "free"] || PLAN_LIMITS.free;
+
+      // Enforce batch size
+      if (body.events.length > limits.maxBatchSize) {
+        return json({ error: `Batch too large. Max ${limits.maxBatchSize} events per request on ${agentPlan?.plan || "free"} plan.` }, 413, env);
+      }
+
+      // Check daily event count
+      const todayCount = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM events WHERE agent_id = ? AND ts >= ? "
+      ).bind(agent.id, Date.now() / 1000 - 86400).first<{ cnt: number }>();
+
+      if ((todayCount?.cnt || 0) + body.events.length > limits.eventsPerDay) {
+        return json({ error: `Daily event limit reached (${limits.eventsPerDay} events/day on ${agentPlan?.plan || "free"} plan). Upgrade for higher limits.` }, 429, env);
+      }
+
       const stmt = env.DB.prepare(
         "INSERT INTO events (agent_id, kind, ts, session_key, data) VALUES (?, ?, ?, ?, ?)"
       );
 
-      const batch = body.events.slice(0, 500).map((e) =>
+      const batch = body.events.slice(0, limits.maxBatchSize).map((e) =>
         stmt.bind(agent.id, e.kind, e.ts, e.session || null, JSON.stringify(e.data))
       );
 
@@ -200,5 +241,18 @@ export default {
     }
 
     return json({ error: "Not found" }, 404, env);
+  },
+
+  // Scheduled: retention cleanup (run daily via CF cron trigger)
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    // Delete events past retention for each plan
+    for (const [plan, limits] of Object.entries(PLAN_LIMITS)) {
+      const cutoff = Date.now() / 1000 - limits.retentionDays * 86400;
+      await env.DB.prepare(
+        "DELETE FROM events WHERE agent_id IN (SELECT id FROM agents WHERE plan = ?) AND ts < ?"
+      ).bind(plan, cutoff).run();
+    }
+    // Also clean up cost_daily older than 90 days for everyone
+    await env.DB.prepare("DELETE FROM cost_daily WHERE date < date('now', '-90 days')").run();
   },
 };

@@ -5,7 +5,10 @@ compatibility_date = "2026-02-06"
 [[d1_databases]]
 binding = "DB"
 database_name = "agentpulse"
-database_id = "placeholder-create-with-wrangler"
+database_id = "494d94bd-e6d8-4346-a1c1-d4ffb59bf19c"
 
 [vars]
 CORS_ORIGIN = "*"
+
+[triggers]
+crons = ["0 3 * * *"]  # Daily retention cleanup at 3 AM UTC
