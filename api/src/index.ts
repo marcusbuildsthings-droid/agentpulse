@@ -228,6 +228,23 @@ export default {
       return json({ sessions: rows.results }, 200, env);
     }
 
+    // ── GET /v1/mailbox ──────────────────────────────────────
+    if (path === "/v1/mailbox" && req.method === "GET") {
+      const since = url.searchParams.get("since") || String(Date.now() / 1000 - 86400);
+      const limit = Math.min(parseInt(url.searchParams.get("limit") || "200"), 1000);
+      const rows = await env.DB.prepare(
+        "SELECT ts, " +
+        "json_extract(data, '$.from') as sender, " +
+        "json_extract(data, '$.to') as receiver, " +
+        "json_extract(data, '$.type') as msg_type, " +
+        "json_extract(data, '$.summary') as summary, " +
+        "json_extract(data, '$.team') as team " +
+        "FROM events WHERE agent_id = ? AND kind = 'mailbox' AND ts >= ? " +
+        "ORDER BY ts DESC LIMIT ?"
+      ).bind(agent.id, parseFloat(since), limit).all();
+      return json({ messages: rows.results, count: rows.results.length }, 200, env);
+    }
+
     // ── GET /v1/crons ───────────────────────────────────────
     if (path === "/v1/crons" && req.method === "GET") {
       const rows = await env.DB.prepare(
