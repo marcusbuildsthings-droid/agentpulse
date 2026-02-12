@@ -1,0 +1,5 @@
+
+.wrangler/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
