@@ -3,157 +3,841 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AgentPulse Dashboard</title>
+  <title>AgentPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --surface2: #242736;
-      --border: #2e3144;
-      --text: #e4e5eb;
-      --text2: #8b8fa3;
+      --bg-0: #050508;
+      --bg-1: #0a0a0f;
+      --bg-2: #0f0f16;
+      --bg-3: #16161f;
+      --bg-4: #1e1e2a;
+      --border-subtle: rgba(255,255,255,0.05);
+      --border: rgba(255,255,255,0.08);
+      --border-hover: rgba(255,255,255,0.12);
+      --text-0: #f0f0ff;
+      --text-1: #d0d0e0;
+      --text-2: #8a8aa0;
+      --text-3: #5a5a7a;
       --accent: #6366f1;
-      --accent2: #818cf8;
-      --green: #22c55e;
-      --red: #ef4444;
-      --yellow: #eab308;
-      --blue: #3b82f6;
+      --accent-hover: #818cf8;
+      --accent-muted: rgba(99,102,241,0.12);
+      --accent-glow: rgba(99,102,241,0.06);
+      --green: #00ff41;
+      --green-dim: #34d399;
+      --green-muted: rgba(0,255,65,0.08);
+      --green-glow: rgba(0,255,65,0.15);
+      --red: #f87171;
+      --red-muted: rgba(248,113,113,0.1);
+      --yellow: #fbbf24;
+      --yellow-muted: rgba(251,191,36,0.1);
+      --blue: #60a5fa;
+      --blue-muted: rgba(96,165,250,0.1);
+      --cyan: #00e5ff;
+      --purple: #a29bfe;
+      --radius: 0px;
+      --radius-lg: 0px;
+      --mono: 'JetBrains Mono', monospace;
+      --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
     }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    html { font-size: 14px; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-0);
+      color: var(--text-1);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
 
-    /* Layout */
+    /* Scanline overlay matching landing */
+    body::after {
+      content: '';
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 9999;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 0; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
     .app { display: flex; min-height: 100vh; }
-    .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; flex-shrink: 0; }
-    .sidebar h1 { font-size: 16px; padding: 0 20px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-    .sidebar h1 .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; }
-    .sidebar nav { padding: 12px 0; }
-    .sidebar nav a { display: flex; align-items: center; gap: 10px; padding: 8px 20px; color: var(--text2); text-decoration: none; font-size: 14px; transition: all 0.15s; }
-    .sidebar nav a:hover, .sidebar nav a.active { color: var(--text); background: var(--surface2); }
-    .sidebar nav a.active { border-left: 2px solid var(--accent); }
 
-    .main { flex: 1; padding: 24px 32px; overflow-y: auto; }
-    .main h2 { font-size: 20px; margin-bottom: 20px; font-weight: 600; }
+    /* ─── Sidebar ──────────────────────────────────────── */
+    .sidebar {
+      width: 220px;
+      background: var(--bg-1);
+      border-right: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      z-index: 10;
+    }
 
-    /* Cards */
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-    .card .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-    .card .value { font-size: 28px; font-weight: 700; }
-    .card .sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
-    .card .value.green { color: var(--green); }
-    .card .value.red { color: var(--red); }
-    .card .value.yellow { color: var(--yellow); }
+    .sidebar-logo {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .sidebar-logo .pulse-dot {
+      width: 8px; height: 8px;
+      background: var(--green);
+      border-radius: 0;
+      box-shadow: 0 0 12px var(--green-glow);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 12px var(--green-glow); }
+      50% { opacity: 0.5; box-shadow: 0 0 4px var(--green-glow); }
+    }
+    .sidebar-logo span {
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: 0.05em;
+      color: var(--text-0);
+    }
+    .sidebar-logo .accent { color: var(--green); }
 
-    /* Tables */
-    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 24px; overflow: hidden; }
-    .panel .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+    .sidebar nav { padding: 12px 8px; flex: 1; }
+    .sidebar nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 12px;
+      color: var(--text-3);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all var(--transition);
+      margin-bottom: 1px;
+    }
+    .sidebar nav a .nav-icon {
+      width: 18px;
+      text-align: center;
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    .sidebar nav a:hover {
+      color: var(--text-1);
+      background: rgba(255,255,255,0.03);
+    }
+    .sidebar nav a.active {
+      color: var(--green);
+      background: var(--green-muted);
+      border-left: 2px solid var(--green);
+      box-shadow: 0 0 20px var(--green-glow);
+    }
+
+    .sidebar-section {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 16px 12px 6px;
+    }
+
+    .sidebar-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-subtle);
+      font-size: 11px;
+      color: var(--text-3);
+      font-family: var(--mono);
+      letter-spacing: 0.05em;
+    }
+
+    .main {
+      flex: 1;
+      margin-left: 220px;
+      min-height: 100vh;
+    }
+
+    .main-header {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(5,5,8,0.85);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+    .main-header h2 {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--text-0);
+      text-transform: uppercase;
+    }
+
+    .main-content { padding: 24px 28px 48px; max-width: 1100px; }
+
+    /* ─── Period Selector ──────────────────────────────── */
+    .period-select {
+      display: flex;
+      gap: 1px;
+      background: var(--border-subtle);
+      overflow: hidden;
+    }
+    .period-select button {
+      background: var(--bg-2);
+      border: none;
+      color: var(--text-3);
+      padding: 5px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: var(--mono);
+      cursor: pointer;
+      transition: all var(--transition);
+      letter-spacing: 0.03em;
+    }
+    .period-select button:hover { color: var(--text-1); background: var(--bg-3); }
+    .period-select button.active {
+      color: var(--green);
+      background: var(--bg-4);
+    }
+
+    /* ─── Cards ────────────────────────────────────────── */
+    .grid { display: grid; gap: 2px; margin-bottom: 20px; }
+    .grid-4 { grid-template-columns: repeat(4, 1fr); }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+
+    .stat-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border-subtle);
+      padding: 18px 20px;
+      transition: all var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card:hover { border-color: var(--green); box-shadow: 0 0 20px var(--green-glow); }
+    .stat-card .label {
+      font-size: 11px;
+      color: var(--text-3);
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .stat-card .value {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      color: var(--text-0);
+    }
+    .stat-card .sub {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-top: 6px;
+      font-family: var(--mono);
+    }
+    .stat-card .value.green { color: var(--green); text-shadow: 0 0 20px var(--green-glow); }
+    .stat-card .value.red { color: var(--red); }
+    .stat-card .value.yellow { color: var(--yellow); }
+
+    .stat-card .card-spark {
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 55%; height: 44px;
+      opacity: 0.5;
+    }
+
+    /* ─── Panels ───────────────────────────────────────── */
+    .panel {
+      background: var(--bg-2);
+      border: 1px solid var(--border-subtle);
+      margin-bottom: 16px;
+      overflow: hidden;
+      transition: border-color var(--transition);
+    }
+    .panel:hover { border-color: var(--border-hover); }
+
+    .panel-header {
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-0);
+      border-bottom: 1px solid var(--border-subtle);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .panel-header .panel-count {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--green);
+      font-family: var(--mono);
+    }
+
+    /* ─── Chart containers ─────────────────────────────── */
+    .chart-container {
+      padding: 16px 20px;
+      position: relative;
+    }
+    .chart-container svg { display: block; }
+    .chart-label {
+      font-size: 10px;
+      fill: var(--text-3);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .chart-grid-line {
+      stroke: var(--border-subtle);
+      stroke-width: 1;
+    }
+
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 20px; text-align: left; font-size: 13px; }
-    th { color: var(--text2); font-weight: 500; border-bottom: 1px solid var(--border); }
-    td { border-bottom: 1px solid var(--border); }
+    th {
+      padding: 8px 20px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-1);
+    }
+    td {
+      padding: 10px 20px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border-subtle);
+      transition: background var(--transition);
+    }
     tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: rgba(0,255,65,0.02); }
 
-    /* Status badges */
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-    .badge.ok { background: rgba(34,197,94,0.15); color: var(--green); }
-    .badge.fail { background: rgba(239,68,68,0.15); color: var(--red); }
-    .badge.warn { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    /* ─── Badges ───────────────────────────────────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--mono);
+      letter-spacing: 0.02em;
+    }
+    .badge::before { content: ''; width: 5px; height: 5px; }
+    .badge.ok { background: var(--green-muted); color: var(--green); }
+    .badge.ok::before { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+    .badge.fail { background: var(--red-muted); color: var(--red); }
+    .badge.fail::before { background: var(--red); }
+    .badge.warn { background: var(--yellow-muted); color: var(--yellow); }
+    .badge.warn::before { background: var(--yellow); }
+    .badge.info { background: var(--blue-muted); color: var(--blue); }
+    .badge.info::before { background: var(--blue); }
 
-    /* Chart placeholder */
-    .chart-area { height: 200px; display: flex; align-items: flex-end; gap: 4px; padding: 20px; }
-    .bar { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 4px; transition: height 0.3s; position: relative; }
-    .bar:hover { background: var(--accent2); }
-    .bar .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; font-size: 11px; white-space: nowrap; }
-    .bar:hover .tooltip { display: block; }
-
-    /* Config panel */
-    .config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
-    .config-panel label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 4px; }
-    .config-panel input { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); width: 100%; max-width: 400px; font-size: 14px; margin-bottom: 16px; }
-    .config-panel button { background: var(--accent); color: white; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
-    .config-panel button:hover { background: var(--accent2); }
-
-    /* Period selector */
-    .period-select { display: flex; gap: 4px; }
-    .period-select button { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
-    .period-select button.active { background: var(--accent); border-color: var(--accent); color: white; }
-
-    /* Event stream */
-    .event-stream { max-height: 400px; overflow-y: auto; }
-    .event-row { display: flex; align-items: center; gap: 12px; padding: 8px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    /* ─── Event Stream ─────────────────────────────────── */
+    .event-stream { max-height: 500px; overflow-y: auto; }
+    .event-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 8px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 13px;
+      transition: background var(--transition);
+    }
     .event-row:last-child { border-bottom: none; }
-    .event-row .ts { color: var(--text2); font-family: monospace; font-size: 12px; min-width: 80px; }
-    .event-row .kind { font-weight: 600; min-width: 80px; }
-    .event-row .detail { color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .event-row:hover { background: rgba(0,255,65,0.02); }
+    .event-row .ts {
+      color: var(--text-3);
+      font-family: var(--mono);
+      font-size: 11px;
+      min-width: 72px;
+    }
+    .event-row .kind {
+      font-weight: 600;
+      font-size: 12px;
+      min-width: 100px;
+      color: var(--text-2);
+      font-family: var(--mono);
+    }
+    .event-row .detail {
+      color: var(--text-3);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
 
-    /* Loading */
-    .loading { text-align: center; padding: 40px; color: var(--text2); }
+    /* ─── Session list ─────────────────────────────────── */
+    .session-item {
+      display: grid;
+      grid-template-columns: 28px 1fr 120px 80px 80px 80px 24px;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      cursor: pointer;
+      transition: background var(--transition);
+      font-size: 13px;
+    }
+    .session-item:hover { background: rgba(0,255,65,0.02); }
+    .session-item:last-child { border-bottom: none; }
+    .session-item .s-icon {
+      width: 28px; height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+    .session-item .s-icon.main { background: var(--green-muted); color: var(--green); }
+    .session-item .s-icon.cron { background: var(--yellow-muted); color: var(--yellow); }
+    .session-item .s-icon.sub { background: var(--blue-muted); color: var(--blue); }
+    .session-item .s-icon.dm { background: var(--accent-muted); color: var(--accent); }
+    .session-item .s-icon.other { background: var(--bg-4); }
+    .session-item .s-name {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-1);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .session-item .s-spark { height: 24px; }
+    .session-item .s-val {
+      text-align: right;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-2);
+    }
+    .session-item .s-time {
+      text-align: right;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-3);
+    }
+    .session-item .s-expand {
+      color: var(--text-3);
+      font-size: 10px;
+      text-align: center;
+      transition: transform var(--transition);
+    }
 
-    /* Empty state */
-    .empty { text-align: center; padding: 60px 20px; }
-    .empty h3 { font-size: 18px; margin-bottom: 8px; }
-    .empty p { color: var(--text2); font-size: 14px; max-width: 400px; margin: 0 auto; }
+    .session-detail {
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border-subtle);
+      display: none;
+    }
+    .session-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border-subtle);
+    }
+    .session-detail-stat {
+      background: var(--bg-1);
+      padding: 12px 16px;
+    }
+    .session-detail-stat .label {
+      font-size: 10px;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .session-detail-stat .val {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-0);
+      font-family: var(--mono);
+    }
+
+    /* ─── Config / Form ────────────────────────────────── */
+    .config-panel { padding: 24px; }
+    .config-panel label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-2);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+    .config-panel input, .config-panel select {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      padding: 9px 14px;
+      color: var(--green);
+      width: 100%;
+      max-width: 420px;
+      font-size: 13px;
+      font-family: var(--mono);
+      margin-bottom: 16px;
+      transition: border-color var(--transition);
+      outline: none;
+    }
+    .config-panel input:focus, .config-panel select:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 20px var(--green-glow);
+    }
+    .config-panel input::placeholder { color: var(--text-3); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      padding: 9px 18px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: var(--mono);
+      cursor: pointer;
+      transition: all var(--transition);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .btn-primary {
+      background: transparent;
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+    .btn-primary:hover {
+      background: var(--green);
+      color: var(--bg-0);
+      box-shadow: 0 0 20px var(--green-glow);
+    }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-2); }
+    .btn-ghost:hover { background: var(--bg-3); color: var(--text-1); border-color: var(--border-hover); }
+    .btn-danger { background: var(--red-muted); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+    .btn-danger:hover { background: rgba(248,113,113,0.2); }
+    .btn-sm { padding: 5px 12px; font-size: 11px; }
+
+    /* ─── Loading / Empty ──────────────────────────────── */
+    .loading {
+      text-align: center;
+      padding: 48px;
+      color: var(--text-3);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    .loading::after {
+      content: '';
+      display: block;
+      width: 16px; height: 16px;
+      margin: 12px auto 0;
+      border: 2px solid var(--border);
+      border-top-color: var(--green);
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .empty .empty-icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+      opacity: 0.4;
+    }
+    .empty h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-1);
+      margin-bottom: 6px;
+    }
+    .empty p {
+      color: var(--text-3);
+      font-size: 13px;
+      max-width: 360px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    /* ─── Onboarding ───────────────────────────────────── */
+    .onboard {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+    .onboard-box {
+      max-width: 520px;
+      width: 100%;
+    }
+    .onboard-box .logo-big {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+      color: var(--text-0);
+    }
+    .onboard-box .logo-big .accent { color: var(--green); text-shadow: 0 0 30px var(--green-glow); }
+    .onboard-box .tagline {
+      color: var(--text-3);
+      font-size: 13px;
+      margin-bottom: 36px;
+    }
+    .onboard-box .code-block {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      padding: 18px 20px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.8;
+      margin-bottom: 24px;
+      color: var(--text-2);
+      overflow-x: auto;
+    }
+    .onboard-box .code-block .kw { color: var(--purple); }
+    .onboard-box .code-block .fn { color: var(--green); text-shadow: 0 0 8px var(--green-glow); }
+    .onboard-box .code-block .str { color: var(--yellow); }
+    .onboard-box .code-block .cm { color: var(--text-3); }
+    .onboard-box .step-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--green);
+      margin-bottom: 8px;
+      font-family: var(--mono);
+    }
+    .onboard-box .or-divider {
+      text-align: center;
+      color: var(--text-3);
+      font-size: 11px;
+      margin: 20px 0;
+      font-family: var(--mono);
+      letter-spacing: 0.1em;
+    }
+
+    /* ─── Alert Form ───────────────────────────────────── */
+    .alert-form {
+      padding: 20px;
+      display: grid;
+      gap: 12px;
+    }
+    .alert-form .form-row { display: flex; gap: 8px; }
+    .alert-form input, .alert-form select {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      padding: 9px 14px;
+      color: var(--text-1);
+      font-size: 13px;
+      font-family: var(--mono);
+      outline: none;
+      transition: border-color var(--transition);
+    }
+    .alert-form input:focus, .alert-form select:focus { border-color: var(--green); }
+    .alert-form input { flex: 1; }
+    .alert-form select { min-width: 140px; }
+
+    /* ─── Chat Messages ────────────────────────────────── */
+    .chat-msg {
+      display: flex;
+      gap: 10px;
+      padding: 12px 20px;
+    }
+    .chat-msg.user { flex-direction: row-reverse; }
+    .chat-msg .avatar {
+      width: 28px; height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .chat-msg.user .avatar { background: var(--blue-muted); }
+    .chat-msg.assistant .avatar { background: var(--accent-muted); }
+    .chat-msg .bubble {
+      max-width: 65%;
+      padding: 10px 14px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .chat-msg.user .bubble { background: var(--blue-muted); }
+    .chat-msg.assistant .bubble { background: var(--bg-3); }
+    .chat-msg .bubble .msg-meta {
+      font-size: 10px;
+      color: var(--text-3);
+      margin-top: 6px;
+      display: flex;
+      gap: 8px;
+      font-family: var(--mono);
+    }
+
+    /* ─── Bar Chart ────────────────────────────────────── */
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 20px;
+    }
+    .bar-label {
+      min-width: 140px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-2);
+      text-align: right;
+    }
+    .bar-track {
+      flex: 1;
+      height: 20px;
+      background: var(--bg-1);
+      position: relative;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      transition: width 0.4s ease;
+    }
+    .bar-value {
+      min-width: 70px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-1);
+      text-align: right;
+    }
 
     /* Responsive */
+    @media (max-width: 1024px) {
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+      .session-item { grid-template-columns: 28px 1fr 80px 80px 24px; }
+      .session-item .s-spark, .session-item .s-val:nth-child(5) { display: none; }
+    }
     @media (max-width: 768px) {
       .sidebar { display: none; }
-      .main { padding: 16px; }
-      .grid { grid-template-columns: 1fr 1fr; }
+      .main { margin-left: 0; }
+      .main-content { padding: 16px; }
+      .grid-4, .grid-3 { grid-template-columns: 1fr 1fr; }
+      .main-header { padding: 0 16px; }
+      .session-item { grid-template-columns: 28px 1fr 80px 24px; }
+      .session-detail-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 480px) {
+      .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <div class="sidebar">
-      <h1><span class="dot"></span> AgentPulse</h1>
-      <nav>
-        <a href="#" data-view="overview" class="active">📊 Overview</a>
-        <a href="#" data-view="sessions">🔄 Sessions</a>
-        <a href="#" data-view="costs">💰 Costs</a>
-        <a href="#" data-view="cron">⏰ Cron Jobs</a>
-        <a href="#" data-view="events">📡 Events</a>
-        <a href="#" data-view="alerts">🔔 Alerts</a>
-        <a href="#" data-view="settings">⚙️ Settings</a>
-      </nav>
+  <!-- Onboarding screen (shown when no config and no ?demo) -->
+  <div id="onboard-screen" class="onboard" style="display:none">
+    <div class="onboard-box">
+      <div class="logo-big">Agent<span class="accent">Pulse</span></div>
+      <div class="tagline">Your agent's vital signs. Lightweight monitoring for autonomous AI agents.</div>
+
+      <div class="step-label">▸ Step 1 — Install</div>
+      <div class="code-block">
+        <span class="cm">$ </span>pip install agentpulse-sdk
+      </div>
+
+      <div class="step-label">▸ Step 2 — Integrate</div>
+      <div class="code-block">
+        <span class="kw">from</span> agentpulse <span class="kw">import</span> pulse<br><br>
+        pulse.<span class="fn">init</span>(<span class="str">"ap_your_key"</span>)<br>
+        pulse.<span class="fn">heartbeat</span>()  <span class="cm"># that's it</span>
+      </div>
+
+      <div class="step-label">▸ Step 3 — Connect</div>
+      <div style="margin-bottom:8px">
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">API Endpoint</label>
+        <input id="ob-url" type="url" placeholder="https://api.agentpulse.dev" style="background:var(--bg-2);border:1px solid var(--border);padding:10px 14px;color:var(--green);width:100%;font-size:13px;font-family:var(--mono);outline:none">
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">API Key</label>
+        <input id="ob-key" type="text" placeholder="ap_..." style="background:var(--bg-2);border:1px solid var(--border);padding:10px 14px;color:var(--green);width:100%;font-size:13px;font-family:var(--mono);outline:none">
+      </div>
+      <button class="btn btn-primary" onclick="saveOnboard()" style="width:100%;justify-content:center;margin-bottom:0">Connect →</button>
+      <div class="or-divider">— or —</div>
+      <button class="btn btn-ghost" onclick="enableDemo()" style="width:100%;justify-content:center">Try Demo Mode</button>
     </div>
-    <div class="main" id="content">
-      <!-- Dynamic content -->
+  </div>
+
+  <!-- Main app -->
+  <div class="app" id="app-shell" style="display:none">
+    <div class="sidebar">
+      <div class="sidebar-logo">
+        <div class="pulse-dot"></div>
+        <span>Agent<span class="accent">Pulse</span></span>
+      </div>
+      <nav>
+        <div class="sidebar-section">Monitor</div>
+        <a href="#" data-view="overview" class="active">
+          <span class="nav-icon">◈</span> Overview
+        </a>
+        <a href="#" data-view="sessions">
+          <span class="nav-icon">⊞</span> Sessions
+        </a>
+        <a href="#" data-view="events">
+          <span class="nav-icon">◎</span> Events
+        </a>
+
+        <div class="sidebar-section">Ops</div>
+        <a href="#" data-view="costs">
+          <span class="nav-icon">◆</span> Costs
+        </a>
+        <a href="#" data-view="cron">
+          <span class="nav-icon">◷</span> Cron Jobs
+        </a>
+
+        <div class="sidebar-section">Configure</div>
+        <a href="#" data-view="alerts">
+          <span class="nav-icon">⚠</span> Alerts
+        </a>
+        <a href="#" data-view="settings">
+          <span class="nav-icon">⊛</span> Settings
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        AgentPulse v2.1
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="main-header" id="main-header">
+        <h2>Overview</h2>
+        <div id="header-actions"></div>
+      </div>
+      <div class="main-content" id="content"></div>
     </div>
   </div>
 
   <script>
-    // ── XSS Protection ────────────────────────────────────────
+    // ── XSS ─────────────────────────────────────────────
     function esc(s) {
       if (s == null) return '';
-      return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
-    // ── State ────────────────────────────────────────────────
+    // ── State ───────────────────────────────────────────
     const state = {
       apiUrl: localStorage.getItem('ap_api_url') || '',
       apiKey: localStorage.getItem('ap_api_key') || '',
       period: '24h',
       view: 'overview',
       stats: null,
-      events: [],
-      refreshInterval: null,
+      demoMode: false,
     };
 
-    // ── API ─────────────────────────────────────────────────
+    // ── API ─────────────────────────────────────────────
     async function api(path, params = {}) {
+      if (state.demoMode) return demoApi(path, params);
       if (!state.apiUrl || !state.apiKey) return null;
       const url = new URL(path, state.apiUrl);
       Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
       try {
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${state.apiKey}` },
-        });
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${state.apiKey}` } });
         if (!res.ok) return null;
         return await res.json();
       } catch { return null; }
@@ -164,249 +848,493 @@
     }
 
     async function fetchEvents(kind, limit = 50) {
-      const data = await api('/v1/events', { kind, limit, ...(state.period === '7d' ? { since: (Date.now()/1000 - 604800).toString() } : state.period === '30d' ? { since: (Date.now()/1000 - 2592000).toString() } : { since: (Date.now()/1000 - 86400).toString() }) });
+      const since = state.period === '7d' ? Date.now()/1000 - 604800 : state.period === '30d' ? Date.now()/1000 - 2592000 : Date.now()/1000 - 86400;
+      const data = await api('/v1/events', { ...(kind ? { kind } : {}), limit, since: since.toString() });
       return data?.events || [];
     }
 
-    // ── Views ───────────────────────────────────────────────
-    function needsConfig() {
-      return !state.apiUrl || !state.apiKey;
+    // ── Helpers ─────────────────────────────────────────
+    function formatNum(n) {
+      if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+      return n.toString();
+    }
+    function formatUsd(n) { return '$' + n.toFixed(2); }
+
+    function relativeTime(ts) {
+      const diff = Date.now()/1000 - ts;
+      if (diff < 60) return 'now';
+      if (diff < 3600) return Math.floor(diff/60) + 'm';
+      if (diff < 86400) return Math.floor(diff/3600) + 'h';
+      return Math.floor(diff/86400) + 'd';
     }
 
-    function renderSettings() {
-      return `
-        <h2>Settings</h2>
-        <div class="config-panel">
-          <label>API Endpoint</label>
-          <input id="cfg-url" type="url" placeholder="https://api.agentpulse.dev" value="${esc(state.apiUrl)}">
-          <label>API Key</label>
-          <input id="cfg-key" type="text" placeholder="ap_..." value="${esc(state.apiKey)}">
-          <button onclick="saveConfig()">Save & Connect</button>
-        </div>
-      `;
-    }
+    function needsConfig() { return !state.apiUrl && !state.apiKey && !state.demoMode; }
 
     function periodSelector() {
       return `<div class="period-select">
-        ${['24h', '7d', '30d'].map(p =>
-          `<button class="${state.period === p ? 'active' : ''}" onclick="setPeriod('${p}')">${p}</button>`
-        ).join('')}
+        ${['24h','7d','30d'].map(p => `<button class="${state.period===p?'active':''}" onclick="setPeriod('${p}')">${p}</button>`).join('')}
       </div>`;
     }
 
-    function renderOverview() {
-      if (needsConfig()) return renderSettings();
-      const s = state.stats;
-      if (!s) return '<div class="loading">Loading...</div>';
-
-      const totalEvents = Object.values(s.events || {}).reduce((a, b) => a + b, 0);
-      const costStr = s.cost?.usd != null ? `$${s.cost.usd.toFixed(2)}` : '$0.00';
-      const tokenStr = s.cost?.tokens != null ? formatNum(s.cost.tokens) : '0';
-
-      const cronJobs = s.cron_health || [];
-      const cronOk = cronJobs.filter(j => j.status === 'ok').reduce((a, j) => a + j.count, 0);
-      const cronFail = cronJobs.filter(j => j.status !== 'ok').reduce((a, j) => a + j.count, 0);
-
-      const sessions = s.events?.session_start || 0;
-
-      return `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h2>Overview</h2>
-          ${periodSelector()}
-        </div>
-        <div class="grid">
-          <div class="card">
-            <div class="label">Total Events</div>
-            <div class="value">${formatNum(totalEvents)}</div>
-            <div class="sub">Last ${state.period}</div>
-          </div>
-          <div class="card">
-            <div class="label">Sessions</div>
-            <div class="value">${sessions}</div>
-            <div class="sub">Started in period</div>
-          </div>
-          <div class="card">
-            <div class="label">Cost</div>
-            <div class="value ${s.cost?.usd > 10 ? 'red' : s.cost?.usd > 5 ? 'yellow' : 'green'}">${costStr}</div>
-            <div class="sub">${tokenStr} tokens</div>
-          </div>
-          <div class="card">
-            <div class="label">Cron Health</div>
-            <div class="value ${cronFail > 0 ? 'red' : 'green'}">${cronFail > 0 ? cronFail + ' failed' : 'All OK'}</div>
-            <div class="sub">${cronOk} successful runs</div>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header">Event Breakdown</div>
-          <table>
-            <thead><tr><th>Event Type</th><th>Count</th></tr></thead>
-            <tbody>
-              ${Object.entries(s.events || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
-                `<tr><td>${esc(k)}</td><td>${v}</td></tr>`
-              ).join('') || '<tr><td colspan="2" style="color:var(--text2)">No events yet</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-      `;
+    function setHeader(title, actions = '') {
+      document.getElementById('main-header').innerHTML = `<h2>${title}</h2><div>${actions}</div>`;
     }
 
-    function renderSessions() {
-      if (needsConfig()) return renderSettings();
-      return `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h2>Sessions</h2>
-          ${periodSelector()}
-        </div>
-        <div id="sessions-content"><div class="loading">Loading sessions...</div></div>
-      `;
+    function getSessionType(key) {
+      if (!key) return { type:'other', icon:'⚫', label:'Other' };
+      if (key === 'agent:main:main') return { type:'main', icon:'▶', label:'Main' };
+      if (key.includes(':cron:')) return { type:'cron', icon:'◷', label:'Cron' };
+      if (key.includes(':subagent:') || key.includes(':sub:')) return { type:'sub', icon:'◇', label:'Sub' };
+      if (key.includes(':dm:') || key.includes(':imessage:') || key.includes(':telegram:')) return { type:'dm', icon:'◈', label:'DM' };
+      return { type:'other', icon:'○', label:'Other' };
     }
 
-    function renderCosts() {
-      if (needsConfig()) return renderSettings();
-      const s = state.stats;
-      if (!s) return '<div class="loading">Loading...</div>';
-
-      return `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h2>Costs</h2>
-          ${periodSelector()}
-        </div>
-        <div class="grid">
-          <div class="card">
-            <div class="label">Total Spend</div>
-            <div class="value ${s.cost?.usd > 10 ? 'red' : 'green'}">$${(s.cost?.usd || 0).toFixed(2)}</div>
-            <div class="sub">Last ${state.period}</div>
-          </div>
-          <div class="card">
-            <div class="label">Total Tokens</div>
-            <div class="value">${formatNum(s.cost?.tokens || 0)}</div>
-          </div>
-          <div class="card">
-            <div class="label">Cost Events</div>
-            <div class="value">${s.events?.cost || 0}</div>
-          </div>
-        </div>
-        <div id="cost-chart-container"></div>
-      `;
+    function shortenSessionKey(key) {
+      if (!key) return '—';
+      let s = key.replace(/^agent:main:/, '');
+      s = s.replace(/([a-f0-9]{8})-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '$1…');
+      return s || key;
     }
 
-    function renderCron() {
-      if (needsConfig()) return renderSettings();
-      const s = state.stats;
-      if (!s) return '<div class="loading">Loading...</div>';
-
-      const cronJobs = s.cron_health || [];
-      // Group by job name
-      const jobs = {};
-      cronJobs.forEach(j => {
-        if (!jobs[j.job]) jobs[j.job] = { ok: 0, fail: 0 };
-        if (j.status === 'ok') jobs[j.job].ok = j.count;
-        else jobs[j.job].fail += j.count;
-      });
-
-      return `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h2>Cron Jobs</h2>
-          ${periodSelector()}
-        </div>
-        <div class="panel">
-          <div class="panel-header">Job Health (${state.period})</div>
-          <table>
-            <thead><tr><th>Job</th><th>Successful</th><th>Failed</th><th>Status</th></tr></thead>
-            <tbody>
-              ${Object.entries(jobs).map(([name, j]) =>
-                `<tr>
-                  <td><strong>${esc(name)}</strong></td>
-                  <td>${j.ok}</td>
-                  <td>${j.fail}</td>
-                  <td><span class="badge ${j.fail > 0 ? 'fail' : 'ok'}">${j.fail > 0 ? 'ISSUES' : 'HEALTHY'}</span></td>
-                </tr>`
-              ).join('') || '<tr><td colspan="4" style="color:var(--text2)">No cron data yet</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-      `;
+    // ── SVG Charts ──────────────────────────────────────
+    function sparklineSVG(values, w, h, color = 'var(--green)', fill = true) {
+      if (!values || values.length < 2) return '';
+      const max = Math.max(...values, 1);
+      const min = Math.min(...values, 0);
+      const range = max - min || 1;
+      const pts = values.map((v, i) => {
+        const x = (i / (values.length - 1)) * w;
+        const y = h - 2 - ((v - min) / range) * (h - 4);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      const fillPts = `0,${h} ${pts} ${w},${h}`;
+      return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:100%">
+        ${fill ? `<polygon points="${fillPts}" fill="${color}" opacity="0.12"/>` : ''}
+        <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>`;
     }
 
-    async function renderEvents() {
-      if (needsConfig()) return renderSettings();
-      const content = document.getElementById('content');
-      content.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h2>Event Stream</h2>
-          ${periodSelector()}
-        </div>
-        <div class="panel">
-          <div class="panel-header">Recent Events</div>
-          <div class="event-stream" id="event-stream"><div class="loading">Loading...</div></div>
-        </div>
-      `;
+    function areaChartSVG(data, w, h, { color = 'var(--green)', labels = [], yLabel = '', gridLines = 3 } = {}) {
+      if (!data || data.length < 2) return '<div style="padding:20px;color:var(--text-3);text-align:center;font-size:12px">No data</div>';
+      const padL = 48, padR = 12, padT = 8, padB = 28;
+      const cw = w - padL - padR, ch = h - padT - padB;
+      const max = Math.max(...data, 1);
+      const pts = data.map((v, i) => {
+        const x = padL + (i / (data.length - 1)) * cw;
+        const y = padT + ch - (v / max) * ch;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      const fillPts = `${padL},${padT + ch} ${pts} ${padL + cw},${padT + ch}`;
 
-      const events = await fetchEvents(null, 100);
-      const stream = document.getElementById('event-stream');
-      if (!events.length) {
-        stream.innerHTML = '<div class="empty"><h3>No events yet</h3><p>Connect your agent with the SDK to start seeing events here.</p></div>';
-        return;
+      let grid = '';
+      for (let i = 0; i <= gridLines; i++) {
+        const y = padT + (i / gridLines) * ch;
+        const val = max - (i / gridLines) * max;
+        grid += `<line x1="${padL}" y1="${y}" x2="${padL + cw}" y2="${y}" class="chart-grid-line"/>`;
+        grid += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" class="chart-label">${formatNum(Math.round(val))}</text>`;
       }
 
-      stream.innerHTML = events.map(e => {
-        const ts = new Date(e.ts * 1000).toLocaleTimeString();
-        const detail = e.session_key ? `session: ${e.session_key}` : JSON.stringify(e.data).slice(0, 80);
-        return `<div class="event-row">
-          <span class="ts">${esc(ts)}</span>
-          <span class="kind">${esc(e.kind)}</span>
-          <span class="detail">${esc(detail)}</span>
-        </div>`;
-      }).join('');
+      let xLabels = '';
+      if (labels.length) {
+        const step = Math.max(1, Math.floor(labels.length / 6));
+        labels.forEach((l, i) => {
+          if (i % step === 0 || i === labels.length - 1) {
+            const x = padL + (i / (labels.length - 1)) * cw;
+            xLabels += `<text x="${x}" y="${padT + ch + 18}" text-anchor="middle" class="chart-label">${l}</text>`;
+          }
+        });
+      }
+
+      return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto">
+        ${grid}
+        <polygon points="${fillPts}" fill="${color}" opacity="0.1"/>
+        <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        ${xLabels}
+      </svg>`;
     }
 
-    // ── Alerts View ─────────────────────────────────────────
+    function barChartSVG(items, w, h, { colors = [] } = {}) {
+      if (!items || !items.length) return '';
+      const padL = 120, padR = 60, padT = 4, padB = 4;
+      const cw = w - padL - padR;
+      const barH = Math.min(22, (h - padT - padB) / items.length - 4);
+      const max = Math.max(...items.map(d => d.value), 1);
+      const defaultColors = ['var(--green)', 'var(--cyan)', 'var(--accent)', 'var(--yellow)', 'var(--purple)', 'var(--blue)', 'var(--red)'];
+
+      return `<svg viewBox="0 0 ${w} ${items.length * (barH + 6) + padT + padB}" style="width:100%;height:auto">
+        ${items.map((d, i) => {
+          const y = padT + i * (barH + 6);
+          const bw = (d.value / max) * cw;
+          const col = colors[i] || defaultColors[i % defaultColors.length];
+          return `
+            <text x="${padL - 8}" y="${y + barH / 2 + 4}" text-anchor="end" class="chart-label">${esc(d.label)}</text>
+            <rect x="${padL}" y="${y}" width="${bw}" height="${barH}" fill="${col}" opacity="0.7"/>
+            <rect x="${padL}" y="${y}" width="${bw}" height="${barH}" fill="${col}" opacity="0.15"/>
+            <text x="${padL + bw + 6}" y="${y + barH / 2 + 4}" class="chart-label" fill="var(--text-1)">${d.display || formatNum(d.value)}</text>
+          `;
+        }).join('')}
+      </svg>`;
+    }
+
+    // ── Views ───────────────────────────────────────────
+
+    function renderSettings() {
+      setHeader('Settings');
+      return `
+        <div class="panel">
+          <div class="panel-header">Connection</div>
+          <div class="config-panel">
+            <label>API Endpoint</label>
+            <input id="cfg-url" type="url" placeholder="https://api.agentpulse.dev" value="${esc(state.apiUrl)}">
+            <label>API Key</label>
+            <input id="cfg-key" type="text" placeholder="ap_..." value="${esc(state.apiKey)}">
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button class="btn btn-primary" onclick="saveConfig()">Save & Connect</button>
+              <button class="btn btn-ghost" onclick="enableDemo()">Try Demo</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderOverview() {
+      const s = state.stats;
+      if (!s) return '<div class="loading">Loading</div>';
+
+      setHeader('Overview', periodSelector());
+
+      const totalEvents = Object.values(s.events || {}).reduce((a, b) => a + b, 0);
+      const costStr = formatUsd(s.cost?.usd || 0);
+      const tokenStr = formatNum(s.cost?.tokens || 0);
+      const cronJobs = s.cron_health || [];
+      const cronFail = cronJobs.filter(j => j.status === 'fail').reduce((a, j) => a + j.count, 0);
+      const cronOk = cronJobs.filter(j => j.status === 'ok').reduce((a, j) => a + j.count, 0);
+      const sessions = s.events?.session_start || 0;
+      const costColor = s.cost?.usd > 10 ? 'red' : s.cost?.usd > 5 ? 'yellow' : 'green';
+
+      const eventTypes = Object.entries(s.events || {}).filter(([k]) => !k.includes('.')).sort((a,b) => b[1]-a[1]);
+
+      // Generate sparkline data for cards
+      const evtSpark = s._eventTimeline || generateSparkData(24);
+      const costSpark = s._costTimeline || generateSparkData(24, 0.5);
+
+      return `
+        <div class="grid grid-4">
+          <div class="stat-card">
+            <div class="label">Events</div>
+            <div class="value">${formatNum(totalEvents)}</div>
+            <div class="sub">${state.period}</div>
+            <div class="card-spark">${sparklineSVG(evtSpark, 100, 40, 'var(--green)')}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Sessions</div>
+            <div class="value">${sessions}</div>
+            <div class="sub">${state.period}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Cost</div>
+            <div class="value ${costColor}">${costStr}</div>
+            <div class="sub">${tokenStr} tokens</div>
+            <div class="card-spark">${sparklineSVG(costSpark, 100, 40, costColor === 'green' ? 'var(--green)' : costColor === 'yellow' ? 'var(--yellow)' : 'var(--red)')}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Cron Health</div>
+            <div class="value ${cronFail > 0 ? 'red' : 'green'}">${cronFail > 0 ? cronFail + ' fail' : 'OK'}</div>
+            <div class="sub">${cronOk} runs</div>
+          </div>
+        </div>
+
+        <!-- Events over time chart -->
+        <div class="panel">
+          <div class="panel-header">Events Over Time</div>
+          <div class="chart-container">
+            ${areaChartSVG(s._eventTimeline || generateSparkData(state.period === '30d' ? 30 : state.period === '7d' ? 7 : 24), 700, 180, {
+              color: 'var(--green)',
+              labels: generateTimeLabels(),
+            })}
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            Event Breakdown
+            <span class="panel-count">${eventTypes.length}</span>
+          </div>
+          <table>
+            <thead><tr><th>Type</th><th style="text-align:right">Count</th><th style="text-align:right;width:140px">Share</th></tr></thead>
+            <tbody>
+              ${eventTypes.map(([k, v]) => {
+                const pct = totalEvents ? ((v/totalEvents)*100).toFixed(1) : 0;
+                return `<tr>
+                  <td><span style="font-family:var(--mono);font-size:12px">${esc(k)}</span></td>
+                  <td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${formatNum(v)}</td>
+                  <td style="text-align:right">
+                    <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
+                      <div style="width:60px;height:3px;background:var(--bg-4);overflow:hidden">
+                        <div style="width:${pct}%;height:100%;background:var(--green)"></div>
+                      </div>
+                      <span style="font-size:11px;color:var(--text-3);min-width:36px;text-align:right;font-family:var(--mono)">${pct}%</span>
+                    </div>
+                  </td>
+                </tr>`;
+              }).join('') || '<tr><td colspan="3" style="color:var(--text-3)">No events</td></tr>'}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    // ── Sessions View ───────────────────────────────────
+    function renderSessions() {
+      setHeader('Sessions', periodSelector());
+      return '<div id="sessions-content"><div class="loading">Loading sessions</div></div>';
+    }
+
+    async function loadSessions() {
+      const el = document.getElementById('sessions-content');
+      if (!el) return;
+
+      let sessions;
+      if (state.demoMode) {
+        sessions = generateDemoSessions();
+      } else {
+        const [startEvents, msgEvents] = await Promise.all([fetchEvents('session_start', 50), fetchEvents('session_message', 100)]);
+        const map = {};
+        startEvents.forEach(e => {
+          (e.data?.active_sessions || []).forEach(s => {
+            const k = s.key;
+            if (!map[k]) map[k] = { key: k, tokens: s.tokens||0, model: s.model||'', channel: s.channel||'', lastActivity: e.ts, messageCount: 0, cost: 0, duration: 0 };
+            else { map[k].tokens = Math.max(map[k].tokens, s.tokens||0); if (e.ts > map[k].lastActivity) map[k].lastActivity = e.ts; }
+          });
+        });
+        msgEvents.forEach(e => {
+          const k = e.session_key || e.data?.session;
+          if (!k) return;
+          if (!map[k]) map[k] = { key: k, tokens: 0, model: e.data?.model||'', channel: '', lastActivity: e.ts, messageCount: 1, cost: 0, duration: 0 };
+          else { map[k].messageCount++; if (e.ts > map[k].lastActivity) { map[k].lastActivity = e.ts; map[k].model = e.data?.model || map[k].model; } }
+        });
+        sessions = Object.values(map);
+      }
+
+      sessions.sort((a, b) => b.lastActivity - a.lastActivity);
+      if (!sessions.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">⊞</div><h3>No sessions</h3><p>Sessions appear when your agent reports events.</p></div>'; return; }
+
+      // Table header
+      let html = `<div class="panel"><div class="panel-header">Active Sessions <span class="panel-count">${sessions.length}</span></div>
+        <div style="overflow-x:auto">
+        <div style="display:grid;grid-template-columns:28px 1fr 120px 80px 80px 80px 24px;gap:12px;padding:8px 20px;border-bottom:1px solid var(--border-subtle)">
+          <span></span>
+          <span style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">Session</span>
+          <span style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">Activity</span>
+          <span style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;text-align:right">Messages</span>
+          <span style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;text-align:right">Cost</span>
+          <span style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;text-align:right">Age</span>
+          <span></span>
+        </div>`;
+
+      sessions.forEach((s, idx) => {
+        const t = getSessionType(s.key);
+        const spark = s._spark || generateSparkData(12, 0.8);
+        html += `<div class="session-item" onclick="toggleDetail(${idx})">
+          <div class="s-icon ${t.type}">${t.icon}</div>
+          <div class="s-name">${esc(shortenSessionKey(s.key))}</div>
+          <div class="s-spark">${sparklineSVG(spark, 120, 24, 'var(--green)', false)}</div>
+          <div class="s-val">${s.messageCount || '—'}</div>
+          <div class="s-val">${s.cost ? formatUsd(s.cost) : '—'}</div>
+          <div class="s-time">${relativeTime(s.lastActivity)}</div>
+          <div class="s-expand" id="exp-${idx}">›</div>
+        </div>
+        <div class="session-detail" id="det-${idx}">
+          <div class="session-detail-grid">
+            <div class="session-detail-stat"><div class="label">Messages</div><div class="val">${s.messageCount || 0}</div></div>
+            <div class="session-detail-stat"><div class="label">Cost</div><div class="val">${s.cost ? formatUsd(s.cost) : '$0.00'}</div></div>
+            <div class="session-detail-stat"><div class="label">Duration</div><div class="val">${s.duration ? Math.round(s.duration / 60) + 'm' : '—'}</div></div>
+            <div class="session-detail-stat"><div class="label">Model</div><div class="val" style="font-size:12px">${esc(s.model || '—')}</div></div>
+          </div>
+          <div style="padding:12px 16px;font-size:11px;color:var(--text-3);font-family:var(--mono)">
+            ${formatNum(s.tokens || 0)} tokens · ${esc(s.channel || 'unknown')} · ${esc(s.key)}
+          </div>
+        </div>`;
+      });
+      html += '</div></div>';
+      el.innerHTML = html;
+    }
+
+    window.toggleDetail = (idx) => {
+      const det = document.getElementById('det-' + idx);
+      const exp = document.getElementById('exp-' + idx);
+      if (!det) return;
+      const show = det.style.display !== 'block';
+      det.style.display = show ? 'block' : 'none';
+      if (exp) exp.style.transform = show ? 'rotate(90deg)' : '';
+    };
+
+    // ── Costs View ──────────────────────────────────────
+    function renderCosts() {
+      const s = state.stats;
+      if (!s) return '<div class="loading">Loading</div>';
+      setHeader('Costs', periodSelector());
+      const costColor = s.cost?.usd > 10 ? 'red' : s.cost?.usd > 5 ? 'yellow' : 'green';
+
+      const models = s._modelCosts || generateDemoModelCosts();
+      const dailySpend = s._dailySpend || generateDemoDailySpend();
+      const topSessions = s._topSessions || generateDemoTopSessions();
+
+      return `
+        <div class="grid grid-3">
+          <div class="stat-card">
+            <div class="label">Total Spend</div>
+            <div class="value ${costColor}">${formatUsd(s.cost?.usd||0)}</div>
+            <div class="sub">${state.period}</div>
+            <div class="card-spark">${sparklineSVG(dailySpend.map(d=>d.value), 100, 40, costColor === 'green' ? 'var(--green)' : 'var(--yellow)')}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Tokens Used</div>
+            <div class="value">${formatNum(s.cost?.tokens||0)}</div>
+            <div class="sub">all models</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Avg Daily</div>
+            <div class="value">${formatUsd(dailySpend.length ? dailySpend.reduce((a,d)=>a+d.value,0)/dailySpend.length : 0)}</div>
+            <div class="sub">${state.period}</div>
+          </div>
+        </div>
+
+        <!-- Daily spend trend -->
+        <div class="panel">
+          <div class="panel-header">Daily Spend Trend</div>
+          <div class="chart-container">
+            ${areaChartSVG(dailySpend.map(d => d.value), 700, 160, {
+              color: 'var(--green)',
+              labels: dailySpend.map(d => d.label),
+            })}
+          </div>
+        </div>
+
+        <!-- Model breakdown -->
+        <div class="grid grid-2">
+          <div class="panel">
+            <div class="panel-header">Cost by Model</div>
+            <div class="chart-container">
+              ${barChartSVG(models.map(m => ({ label: m.model, value: m.cost, display: formatUsd(m.cost) })), 440, 200)}
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">Model Breakdown</div>
+            <table>
+              <thead><tr><th>Model</th><th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th><th style="text-align:right">Share</th></tr></thead>
+              <tbody>
+                ${models.map(m => {
+                  const totalCost = models.reduce((a,x)=>a+x.cost,0)||1;
+                  const pct = ((m.cost/totalCost)*100).toFixed(1);
+                  return `<tr>
+                    <td><span style="font-family:var(--mono);font-size:12px">${esc(m.model)}</span></td>
+                    <td style="text-align:right;font-family:var(--mono);font-size:12px">${formatNum(m.tokens)}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">${formatUsd(m.cost)}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-3)">${pct}%</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Top sessions by cost -->
+        <div class="panel">
+          <div class="panel-header">Top Sessions by Cost <span class="panel-count">${topSessions.length}</span></div>
+          <table>
+            <thead><tr><th>Session</th><th>Model</th><th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th><th style="text-align:right">Duration</th></tr></thead>
+            <tbody>
+              ${topSessions.map(s => `<tr>
+                <td><span style="font-family:var(--mono);font-size:12px">${esc(shortenSessionKey(s.key))}</span></td>
+                <td style="font-family:var(--mono);font-size:12px;color:var(--text-2)">${esc(s.model)}</td>
+                <td style="text-align:right;font-family:var(--mono);font-size:12px">${formatNum(s.tokens)}</td>
+                <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">${formatUsd(s.cost)}</td>
+                <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-3)">${Math.round(s.duration/60)}m</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    // ── Cron View ───────────────────────────────────────
+    function renderCron() {
+      const s = state.stats;
+      if (!s) return '<div class="loading">Loading</div>';
+      setHeader('Cron Jobs', periodSelector());
+
+      const jobs = {};
+      (s.cron_health || []).forEach(j => {
+        if (!jobs[j.job]) jobs[j.job] = { ok: 0, fail: 0 };
+        if (j.status === 'ok') jobs[j.job].ok = j.count; else jobs[j.job].fail += j.count;
+      });
+
+      return `<div class="panel">
+        <div class="panel-header">Job Health <span class="panel-count">${Object.keys(jobs).length}</span></div>
+        <table>
+          <thead><tr><th>Job</th><th style="text-align:right">Success</th><th style="text-align:right">Failed</th><th style="text-align:right">Status</th></tr></thead>
+          <tbody>
+            ${Object.entries(jobs).map(([name, j]) => `<tr>
+              <td><span style="font-family:var(--mono);font-size:12px">${esc(name)}</span></td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--green)">${j.ok}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;color:${j.fail ? 'var(--red)' : 'var(--text-3)'}">${j.fail}</td>
+              <td style="text-align:right"><span class="badge ${j.fail > 0 ? 'fail' : 'ok'}">${j.fail > 0 ? 'Issues' : 'Healthy'}</span></td>
+            </tr>`).join('') || '<tr><td colspan="4" style="color:var(--text-3)">No cron data</td></tr>'}
+          </tbody>
+        </table>
+      </div>`;
+    }
+
+    // ── Events View ─────────────────────────────────────
+    async function renderEventsView() {
+      setHeader('Events', periodSelector());
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">Loading events</div>';
+      const events = await fetchEvents(null, 100);
+      if (!events.length) { content.innerHTML = '<div class="empty"><div class="empty-icon">◎</div><h3>No events</h3><p>Connect your agent to start seeing events.</p></div>'; return; }
+
+      content.innerHTML = `<div class="panel"><div class="panel-header">Recent Events <span class="panel-count">${events.length}</span></div>
+        <div class="event-stream">${events.map(e => {
+          const ts = new Date(e.ts * 1000).toLocaleTimeString();
+          const detail = e.session_key ? e.session_key : JSON.stringify(e.data).slice(0, 80);
+          return `<div class="event-row">
+            <span class="ts">${esc(ts)}</span>
+            <span class="kind">${esc(e.kind)}</span>
+            <span class="detail">${esc(detail)}</span>
+          </div>`;
+        }).join('')}</div></div>`;
+    }
+
+    // ── Alerts View ─────────────────────────────────────
     async function renderAlerts() {
-      if (needsConfig()) { document.getElementById('content').innerHTML = renderSettings(); return; }
+      setHeader('Alerts', `<button class="btn btn-primary btn-sm" onclick="showCreateAlert()">+ New Rule</button>`);
       const content = document.getElementById('content');
       content.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h2>🔔 Alert Rules</h2>
-          <button onclick="showCreateAlert()" style="background:var(--accent);color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">+ New Rule</button>
-        </div>
-        <div id="create-alert-form" style="display:none;margin-bottom:20px" class="panel">
+        <div id="create-alert-form" class="panel" style="display:none;margin-bottom:16px">
           <div class="panel-header">Create Alert Rule</div>
-          <div style="padding:16px;display:grid;gap:12px">
-            <input id="a-name" placeholder="Rule name (e.g. Budget Alert)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:14px">
-            <div style="display:flex;gap:8px">
-              <select id="a-metric" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px">
+          <div class="alert-form">
+            <input id="a-name" placeholder="Rule name (e.g. Budget Alert)">
+            <div class="form-row">
+              <select id="a-metric">
                 <option value="daily_cost">Daily Cost ($)</option>
                 <option value="daily_tokens">Daily Tokens</option>
                 <option value="daily_events">Daily Events</option>
                 <option value="cron_fail_count">Cron Failures (24h)</option>
                 <option value="cron_fail_streak">Cron Fail Streak</option>
               </select>
-              <select id="a-op" style="width:80px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px">
-                <option value="gt">&gt;</option>
-                <option value="gte">≥</option>
-                <option value="lt">&lt;</option>
-                <option value="lte">≤</option>
-                <option value="eq">=</option>
+              <select id="a-op" style="min-width:70px">
+                <option value="gt">&gt;</option><option value="gte">≥</option><option value="lt">&lt;</option><option value="lte">≤</option><option value="eq">=</option>
               </select>
-              <input id="a-threshold" type="number" step="any" placeholder="Threshold" style="width:120px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px">
+              <input id="a-threshold" type="number" step="any" placeholder="Threshold">
             </div>
-            <input id="a-webhook" placeholder="Webhook URL (https://...)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:14px">
+            <input id="a-webhook" placeholder="Webhook URL (https://...)">
             <div style="display:flex;gap:8px">
-              <button onclick="createAlert()" style="background:var(--green);color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer">Create</button>
-              <button onclick="document.getElementById('create-alert-form').style.display='none'" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border);padding:8px 16px;border-radius:6px;cursor:pointer">Cancel</button>
+              <button class="btn btn-primary btn-sm" onclick="createAlert()">Create</button>
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('create-alert-form').style.display='none'">Cancel</button>
             </div>
           </div>
         </div>
-        <div class="panel">
-          <div class="panel-header">Active Rules</div>
-          <div id="alerts-list"><div class="loading">Loading...</div></div>
-        </div>
-        <div class="panel" style="margin-top:16px">
-          <div class="panel-header">Alert History</div>
-          <div id="alerts-history"><div class="loading">Loading...</div></div>
-        </div>
-      `;
+        <div class="panel"><div class="panel-header">Active Rules</div><div id="alerts-list"><div class="loading">Loading</div></div></div>
+        <div class="panel"><div class="panel-header">Alert History</div><div id="alerts-history"><div class="loading">Loading</div></div></div>`;
       await loadAlerts();
       await loadAlertHistory();
     }
@@ -420,11 +1348,14 @@
       const threshold = parseFloat(document.getElementById('a-threshold').value);
       const webhook_url = document.getElementById('a-webhook').value;
       if (!name || isNaN(threshold)) { alert('Fill in name and threshold'); return; }
+      if (state.demoMode) {
+        demoAlerts.push({ id: Date.now(), rule_name: name, condition: { metric, op, threshold }, channel: 'webhook', webhook_url, enabled: true });
+        document.getElementById('create-alert-form').style.display = 'none';
+        await loadAlerts();
+        return;
+      }
       try {
-        const res = await fetch(state.apiUrl + '/v1/alerts', {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.apiKey },
-          body: JSON.stringify({ rule_name: name, condition: { metric, op, threshold }, channel: 'webhook', webhook_url })
-        });
+        const res = await fetch(state.apiUrl + '/v1/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + state.apiKey }, body: JSON.stringify({ rule_name: name, condition: { metric, op, threshold }, channel: 'webhook', webhook_url }) });
         if (!res.ok) { const e = await res.json(); alert(e.error); return; }
         document.getElementById('create-alert-form').style.display = 'none';
         await loadAlerts();
@@ -432,39 +1363,50 @@
     };
 
     window.toggleAlert = async (id, enabled) => {
-      await fetch(state.apiUrl + '/v1/alerts/' + id, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.apiKey },
-        body: JSON.stringify({ enabled: !enabled })
-      });
+      if (state.demoMode) {
+        const a = demoAlerts.find(x => x.id === id);
+        if (a) a.enabled = !a.enabled;
+        await loadAlerts();
+        return;
+      }
+      await fetch(state.apiUrl + '/v1/alerts/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + state.apiKey }, body: JSON.stringify({ enabled: !enabled }) });
       await loadAlerts();
     };
 
     window.deleteAlert = async (id) => {
       if (!confirm('Delete this alert rule?')) return;
-      await fetch(state.apiUrl + '/v1/alerts/' + id, {
-        method: 'DELETE', headers: { 'Authorization': 'Bearer ' + state.apiKey }
-      });
+      if (state.demoMode) {
+        const idx = demoAlerts.findIndex(x => x.id === id);
+        if (idx >= 0) demoAlerts.splice(idx, 1);
+        await loadAlerts();
+        return;
+      }
+      await fetch(state.apiUrl + '/v1/alerts/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + state.apiKey } });
       await loadAlerts();
     };
 
     async function loadAlerts() {
       const el = document.getElementById('alerts-list');
       try {
-        const res = await fetch(state.apiUrl + '/v1/alerts', { headers: { 'Authorization': 'Bearer ' + state.apiKey } });
-        const data = await res.json();
-        if (!data.alerts?.length) { el.innerHTML = '<div class="empty"><h3>No alert rules</h3><p>Create one to get notified about cost spikes, cron failures, and more.</p></div>'; return; }
-        const opSymbol = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
-        el.innerHTML = '<table style="width:100%"><thead><tr><th style="text-align:left;padding:12px 16px;color:var(--text2);font-size:12px">Rule</th><th style="text-align:left;padding:12px 16px;color:var(--text2);font-size:12px">Condition</th><th style="text-align:left;padding:12px 16px;color:var(--text2);font-size:12px">Delivery</th><th style="text-align:right;padding:12px 16px;color:var(--text2);font-size:12px">Actions</th></tr></thead><tbody>' +
+        let data;
+        if (state.demoMode) {
+          data = { alerts: demoAlerts };
+        } else {
+          const res = await fetch(state.apiUrl + '/v1/alerts', { headers: { Authorization: 'Bearer ' + state.apiKey } });
+          data = await res.json();
+        }
+        if (!data.alerts?.length) { el.innerHTML = '<div class="empty"><h3>No alert rules</h3><p>Create one to get notified about cost spikes and cron failures.</p></div>'; return; }
+        const ops = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
+        el.innerHTML = `<table><thead><tr><th>Rule</th><th>Condition</th><th>Channel</th><th style="text-align:right">Actions</th></tr></thead><tbody>` +
           data.alerts.map(a => {
             const c = a.condition;
-            const statusColor = a.enabled ? 'var(--green)' : 'var(--text2)';
-            return `<tr style="border-top:1px solid var(--border)">
-              <td style="padding:12px 16px"><span style="color:${statusColor}">●</span> ${esc(a.rule_name)}</td>
-              <td style="padding:12px 16px;color:var(--text2);font-size:13px">${esc(c.metric)} ${opSymbol[c.op] || c.op} ${c.threshold}</td>
-              <td style="padding:12px 16px;color:var(--text2);font-size:13px">${esc(a.channel)}${a.webhook_url ? ' → ' + esc(a.webhook_url.slice(0, 40)) + '...' : ''}</td>
-              <td style="padding:12px 16px;text-align:right">
-                <button onclick="toggleAlert(${a.id}, ${a.enabled})" style="background:none;border:1px solid var(--border);color:var(--text2);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-right:4px">${a.enabled ? 'Disable' : 'Enable'}</button>
-                <button onclick="deleteAlert(${a.id})" style="background:none;border:1px solid var(--red);color:var(--red);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px">Delete</button>
+            return `<tr>
+              <td><span style="color:${a.enabled ? 'var(--green)' : 'var(--text-3)'}">●</span> ${esc(a.rule_name)}</td>
+              <td style="color:var(--text-2);font-family:var(--mono);font-size:12px">${esc(c.metric)} ${ops[c.op]||c.op} ${c.threshold}</td>
+              <td style="color:var(--text-3);font-size:12px;font-family:var(--mono)">${esc(a.channel)}${a.webhook_url ? ' → ' + esc(a.webhook_url.slice(0,30)) + '…' : ''}</td>
+              <td style="text-align:right">
+                <button class="btn btn-ghost btn-sm" onclick="toggleAlert(${a.id},${a.enabled})">${a.enabled ? 'Disable' : 'Enable'}</button>
+                <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteAlert(${a.id})">Delete</button>
               </td>
             </tr>`;
           }).join('') + '</tbody></table>';
@@ -474,72 +1416,42 @@
     async function loadAlertHistory() {
       const el = document.getElementById('alerts-history');
       try {
-        const res = await fetch(state.apiUrl + '/v1/alerts/history', { headers: { 'Authorization': 'Bearer ' + state.apiKey } });
-        const data = await res.json();
-        if (!data.history?.length) { el.innerHTML = '<div class="empty"><p>No alerts have fired yet.</p></div>'; return; }
-        el.innerHTML = data.history.map(h => {
-          const ts = new Date(h.ts * 1000).toLocaleString();
-          return `<div class="event-row">
-            <span class="ts">${esc(ts)}</span>
-            <span class="kind" style="color:var(--red)">🔴 ${esc(h.rule_name)}</span>
-            <span class="detail">${esc(h.metric)}: ${h.value} (threshold: ${h.threshold})</span>
-          </div>`;
-        }).join('');
+        let data;
+        if (state.demoMode) {
+          data = { history: demoAlertHistory };
+        } else {
+          const res = await fetch(state.apiUrl + '/v1/alerts/history', { headers: { Authorization: 'Bearer ' + state.apiKey } });
+          data = await res.json();
+        }
+        if (!data.history?.length) { el.innerHTML = '<div class="empty"><p style="color:var(--text-3)">No alerts fired yet.</p></div>'; return; }
+        el.innerHTML = `<div class="event-stream">${data.history.map(h => `<div class="event-row">
+          <span class="ts">${esc(new Date(h.ts*1000).toLocaleString())}</span>
+          <span class="kind" style="color:var(--red)">● ${esc(h.rule_name)}</span>
+          <span class="detail">${esc(h.metric)}: ${h.value} (threshold: ${h.threshold})</span>
+        </div>`).join('')}</div>`;
       } catch { el.innerHTML = '<div class="empty">Failed to load history</div>'; }
     }
 
-    // ── Helpers ──────────────────────────────────────────────
-    function formatNum(n) {
-      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-      return n.toString();
-    }
-
-    // ── Navigation ──────────────────────────────────────────
+    // ── Navigation ──────────────────────────────────────
     async function setView(view) {
       state.view = view;
-      document.querySelectorAll('.sidebar nav a').forEach(a => {
-        a.classList.toggle('active', a.dataset.view === view);
-      });
-
-      if (!needsConfig() && view !== 'settings') {
-        await fetchStats();
-      }
-
+      document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
       const content = document.getElementById('content');
+
+      if (view !== 'settings') await fetchStats();
+
       switch (view) {
         case 'overview': content.innerHTML = renderOverview(); break;
         case 'sessions': content.innerHTML = renderSessions(); loadSessions(); break;
         case 'costs': content.innerHTML = renderCosts(); break;
         case 'cron': content.innerHTML = renderCron(); break;
-        case 'events': await renderEvents(); break;
+        case 'events': await renderEventsView(); break;
         case 'alerts': await renderAlerts(); break;
         case 'settings': content.innerHTML = renderSettings(); break;
       }
     }
 
-    async function loadSessions() {
-      const events = await fetchEvents('session_start', 50);
-      const el = document.getElementById('sessions-content');
-      if (!el) return;
-      if (!events.length) {
-        el.innerHTML = '<div class="empty"><h3>No sessions yet</h3><p>Sessions appear when your agent reports session_start events.</p></div>';
-        return;
-      }
-      el.innerHTML = `<div class="panel"><table>
-        <thead><tr><th>Session</th><th>Started</th><th>Details</th></tr></thead>
-        <tbody>${events.map(e => `<tr>
-          <td><strong>${esc(e.session_key || e.data?.session || '—')}</strong></td>
-          <td>${esc(new Date(e.ts * 1000).toLocaleString())}</td>
-          <td style="color:var(--text2)">${esc(e.data?.model || '')} ${esc(e.data?.channel || '')}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>`;
-    }
-
-    function setPeriod(p) {
-      state.period = p;
-      setView(state.view);
-    }
+    function setPeriod(p) { state.period = p; setView(state.view); }
 
     function saveConfig() {
       state.apiUrl = document.getElementById('cfg-url').value.replace(/\/$/, '');
@@ -549,58 +1461,156 @@
       setView('overview');
     }
 
-    // ── Init ────────────────────────────────────────────────
+    function saveOnboard() {
+      state.apiUrl = document.getElementById('ob-url').value.replace(/\/$/, '');
+      state.apiKey = document.getElementById('ob-key').value;
+      if (!state.apiUrl || !state.apiKey) { alert('Please enter both URL and key'); return; }
+      localStorage.setItem('ap_api_url', state.apiUrl);
+      localStorage.setItem('ap_api_key', state.apiKey);
+      showApp();
+    }
+
     document.querySelectorAll('.sidebar nav a').forEach(a => {
-      a.addEventListener('click', (e) => { e.preventDefault(); setView(a.dataset.view); });
+      a.addEventListener('click', e => { e.preventDefault(); setView(a.dataset.view); });
     });
 
-    // ── Demo Mode ─────────────────────────────────────────
-    function enableDemo() {
-      state.apiUrl = 'demo';
-      state.apiKey = 'demo';
-      // Monkey-patch api() to return fake data
-      window._realApi = api;
-      window.api = async (path, params = {}) => {
-        if (path === '/v1/stats') return {
-          period: state.period,
-          events: { session_start: 47, cost: 312, heartbeat: 1440, cron: 88, memory: 24, alert: 3 },
-          cost: { usd: state.period === '7d' ? 28.45 : state.period === '30d' ? 112.30 : 4.12, tokens: state.period === '7d' ? 2840000 : state.period === '30d' ? 11200000 : 412000 },
-          cron_health: [
-            { job: 'memory-consolidation', status: 'ok', count: state.period === '7d' ? 7 : 1 },
-            { job: 'session-cleanup', status: 'ok', count: state.period === '7d' ? 84 : 12 },
-            { job: 'builder-agent', status: 'ok', count: state.period === '7d' ? 12 : 2 },
-            { job: 'builder-agent', status: 'fail', count: 1 },
-            { job: 'research-agent', status: 'ok', count: state.period === '7d' ? 7 : 1 },
-            { job: 'horror-content', status: 'ok', count: state.period === '7d' ? 21 : 3 },
-          ],
+    // ── Demo Data ───────────────────────────────────────
+    function generateSparkData(n, variance = 1) {
+      const data = [];
+      let v = 10 + Math.random() * 20;
+      for (let i = 0; i < n; i++) {
+        v = Math.max(1, v + (Math.random() - 0.45) * 8 * variance);
+        data.push(Math.round(v));
+      }
+      return data;
+    }
+
+    function generateTimeLabels() {
+      if (state.period === '30d') return Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-29+i);return (d.getMonth()+1)+'/'+d.getDate()});
+      if (state.period === '7d') return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      return Array.from({length:24},(_,i)=>i+'h');
+    }
+
+    function generateDemoModelCosts() {
+      const mul = state.period === '30d' ? 8 : state.period === '7d' ? 3 : 1;
+      return [
+        { model: 'claude-opus-4', cost: 2.45*mul, tokens: 180000*mul },
+        { model: 'claude-sonnet-4', cost: 0.89*mul, tokens: 320000*mul },
+        { model: 'gpt-4o', cost: 0.52*mul, tokens: 95000*mul },
+        { model: 'claude-haiku', cost: 0.18*mul, tokens: 420000*mul },
+        { model: 'gemini-2.5-pro', cost: 0.08*mul, tokens: 45000*mul },
+      ];
+    }
+
+    function generateDemoDailySpend() {
+      const n = state.period === '30d' ? 30 : state.period === '7d' ? 7 : 24;
+      const isHours = state.period === '24h';
+      return Array.from({length:n},(_,i)=>{
+        const d = new Date();
+        if (isHours) d.setHours(d.getHours()-n+1+i);
+        else d.setDate(d.getDate()-n+1+i);
+        return {
+          label: isHours ? d.getHours()+'h' : (d.getMonth()+1)+'/'+d.getDate(),
+          value: parseFloat((0.5 + Math.random() * 3).toFixed(2))
         };
-        if (path === '/v1/events') {
-          const now = Date.now() / 1000;
-          return { events: Array.from({ length: 20 }, (_, i) => ({
-            id: i + 1, kind: ['cost', 'session_start', 'heartbeat', 'cron', 'memory'][i % 5],
-            ts: now - i * 300, session_key: `agent:main:${i % 3 === 0 ? 'main' : 'cron-' + i}`,
-            data: { model: 'claude-opus-4-6', tokens: 5000 + i * 100, cost_usd: 0.12 + i * 0.01 },
-          })), count: 20 };
-        }
-        return null;
-      };
-      // Also patch fetchStats and fetchEvents
-      window._realFetchStats = fetchStats;
-      fetchStats = async () => { state.stats = await window.api('/v1/stats', { period: state.period }); };
-      window._realFetchEvents = fetchEvents;
-      fetchEvents = async (kind, limit) => { const d = await window.api('/v1/events', {}); return d?.events || []; };
+      });
+    }
+
+    function generateDemoTopSessions() {
+      const now = Date.now()/1000;
+      return [
+        { key: 'agent:main:main', model: 'claude-opus-4', tokens: 85000, cost: 1.28, duration: 3600 },
+        { key: 'agent:main:subagent:a1b2c3d4', model: 'claude-opus-4', tokens: 42000, cost: 0.63, duration: 1800 },
+        { key: 'agent:main:cron:builder-agent', model: 'claude-sonnet-4', tokens: 38000, cost: 0.38, duration: 900 },
+        { key: 'agent:main:imessage:direct:+14107461637', model: 'claude-sonnet-4', tokens: 25000, cost: 0.25, duration: 2400 },
+        { key: 'agent:main:cron:research-agent', model: 'gpt-4o', tokens: 18000, cost: 0.18, duration: 600 },
+      ];
+    }
+
+    function generateDemoSessions() {
+      const now = Date.now()/1000;
+      return [
+        { key: 'agent:main:main', tokens: 85000, model: 'claude-opus-4', channel: 'imessage', lastActivity: now - 120, messageCount: 34, cost: 1.28, duration: 3600, _spark: generateSparkData(12) },
+        { key: 'agent:main:cron:builder-agent', tokens: 38000, model: 'claude-sonnet-4', channel: 'cron', lastActivity: now - 900, messageCount: 8, cost: 0.38, duration: 900, _spark: generateSparkData(12, 0.5) },
+        { key: 'agent:main:subagent:a1b2c3d4-e5f6-7890-abcd-ef1234567890', tokens: 42000, model: 'claude-opus-4', channel: 'subagent', lastActivity: now - 300, messageCount: 12, cost: 0.63, duration: 1800, _spark: generateSparkData(12) },
+        { key: 'agent:main:cron:memory-consolidation', tokens: 5000, model: 'claude-haiku', channel: 'cron', lastActivity: now - 1800, messageCount: 2, cost: 0.02, duration: 120, _spark: generateSparkData(12, 0.3) },
+        { key: 'agent:main:imessage:direct:+14107461637', tokens: 25000, model: 'claude-sonnet-4', channel: 'imessage', lastActivity: now - 600, messageCount: 18, cost: 0.25, duration: 2400, _spark: generateSparkData(12) },
+        { key: 'agent:main:cron:session-cleanup', tokens: 3000, model: 'claude-haiku', channel: 'cron', lastActivity: now - 3600, messageCount: 1, cost: 0.01, duration: 60, _spark: generateSparkData(12, 0.2) },
+        { key: 'agent:main:cron:horror-content', tokens: 15000, model: 'claude-sonnet-4', channel: 'cron', lastActivity: now - 7200, messageCount: 6, cost: 0.15, duration: 480, _spark: generateSparkData(12, 0.6) },
+        { key: 'agent:main:cron:research-agent', tokens: 18000, model: 'gpt-4o', channel: 'cron', lastActivity: now - 5400, messageCount: 4, cost: 0.18, duration: 600, _spark: generateSparkData(12, 0.4) },
+      ];
+    }
+
+    // Demo alert data
+    let demoAlerts = [
+      { id: 1, rule_name: 'Daily Budget', condition: { metric: 'daily_cost', op: 'gt', threshold: 5 }, channel: 'webhook', webhook_url: 'https://hooks.slack.com/...', enabled: true },
+      { id: 2, rule_name: 'Token Spike', condition: { metric: 'daily_tokens', op: 'gt', threshold: 500000 }, channel: 'webhook', webhook_url: 'https://hooks.slack.com/...', enabled: true },
+      { id: 3, rule_name: 'Cron Failures', condition: { metric: 'cron_fail_count', op: 'gt', threshold: 3 }, channel: 'webhook', webhook_url: '', enabled: false },
+    ];
+
+    const demoAlertHistory = [
+      { ts: Date.now()/1000 - 3600, rule_name: 'Daily Budget', metric: 'daily_cost', value: 6.42, threshold: 5 },
+      { ts: Date.now()/1000 - 86400, rule_name: 'Token Spike', metric: 'daily_tokens', value: 612000, threshold: 500000 },
+      { ts: Date.now()/1000 - 172800, rule_name: 'Daily Budget', metric: 'daily_cost', value: 8.15, threshold: 5 },
+    ];
+
+    function demoApi(path, params = {}) {
+      if (path === '/v1/stats') {
+        const mul = state.period === '30d' ? 8 : state.period === '7d' ? 3 : 1;
+        return {
+          period: state.period,
+          events: { session_start: 47*mul, cost: 312*mul, heartbeat: 1440*mul, cron: 88*mul, memory: 24*mul, alert: 3 },
+          cost: { usd: 4.12*mul, tokens: 412000*mul },
+          cron_health: [
+            { job: 'memory-consolidation', status: 'ok', count: 7*mul },
+            { job: 'session-cleanup', status: 'ok', count: 84*mul },
+            { job: 'builder-agent', status: 'ok', count: 12*mul },
+            { job: 'builder-agent', status: 'fail', count: 1 },
+            { job: 'research-agent', status: 'ok', count: 7*mul },
+            { job: 'horror-content', status: 'ok', count: 21*mul },
+          ],
+          _eventTimeline: generateSparkData(state.period === '30d' ? 30 : state.period === '7d' ? 7 : 24),
+          _costTimeline: generateSparkData(state.period === '30d' ? 30 : state.period === '7d' ? 7 : 24, 0.6),
+          _modelCosts: generateDemoModelCosts(),
+          _dailySpend: generateDemoDailySpend(),
+          _topSessions: generateDemoTopSessions(),
+        };
+      }
+      if (path === '/v1/events') {
+        const now = Date.now()/1000;
+        return { events: Array.from({ length: 30 }, (_, i) => ({
+          id: i+1,
+          kind: ['cost','session_start','heartbeat','cron','memory','alert'][i%6],
+          ts: now - i*300,
+          session_key: `agent:main:${i%3===0?'main':i%3===1?'cron:builder-agent':'subagent:'+i}`,
+          data: { model: ['claude-opus-4','claude-sonnet-4','gpt-4o','claude-haiku'][i%4], tokens: 5000+i*200, cost_usd: 0.10+i*0.02 },
+        })), count: 30 };
+      }
+      return null;
+    }
+
+    // ── Show/Hide App ───────────────────────────────────
+    function showApp() {
+      document.getElementById('onboard-screen').style.display = 'none';
+      document.getElementById('app-shell').style.display = 'flex';
       setView('overview');
     }
 
-    // Check for ?demo query param
+    function enableDemo() {
+      state.demoMode = true;
+      state.apiUrl = 'demo';
+      state.apiKey = 'demo';
+      showApp();
+    }
+
+    // ── Init ────────────────────────────────────────────
     if (new URLSearchParams(location.search).has('demo')) {
       enableDemo();
+    } else if (state.apiUrl && state.apiKey) {
+      showApp();
     } else {
-      // Auto-refresh every 30s
-      setView(needsConfig() ? 'settings' : 'overview');
-      state.refreshInterval = setInterval(() => {
-        if (!needsConfig() && state.view !== 'settings') setView(state.view);
-      }, 30000);
+      // Show onboarding
+      document.getElementById('onboard-screen').style.display = 'flex';
     }
   </script>
 </body>
