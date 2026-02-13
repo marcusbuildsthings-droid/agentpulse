@@ -481,6 +481,46 @@
       font-family: var(--mono);
     }
 
+    /* ─── Session Timeline ─────────────────────────────── */
+    .session-timeline-events {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-0);
+    }
+    .timeline-event {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 11px;
+      transition: background var(--transition);
+    }
+    .timeline-event:last-child { border-bottom: none; }
+    .timeline-event:hover { background: rgba(0,255,65,0.02); }
+    .timeline-event .timeline-time {
+      color: var(--text-3);
+      font-family: var(--mono);
+      min-width: 65px;
+      font-size: 10px;
+    }
+    .timeline-event .timeline-kind {
+      font-weight: 600;
+      font-family: var(--mono);
+      min-width: 80px;
+      font-size: 11px;
+    }
+    .timeline-event .timeline-detail {
+      color: var(--text-3);
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     /* ─── Config / Form ────────────────────────────────── */
     .config-panel { padding: 24px; }
     .config-panel label {
@@ -918,8 +958,19 @@
       return { type:'other', icon:'○', label:'Other' };
     }
 
-    function shortenSessionKey(key) {
+    function shortenSessionKey(key, session = null) {
       if (!key) return '—';
+      
+      // Use job_name if available for cron sessions
+      if (session?.job_name && key.includes(':cron:')) {
+        return session.job_name;
+      }
+      
+      // Use label if available for sub-agent sessions
+      if (session?.label && key.includes(':subagent:')) {
+        return session.label;
+      }
+      
       let s = key.replace(/^agent:main:/, '');
       
       // Extract cron job names: "cron:job-name" → "job-name"
@@ -1193,18 +1244,18 @@
       sessions.forEach((s, idx) => {
         const t = getSessionType(s.key);
         const spark = s._spark || generateSparkData(12, 0.8);
-        html += `<div class="session-item" onclick="toggleDetail(${idx})">
+        html += `<div class="session-item" onclick="toggleDetail(${idx}, '${esc(s.key).replace(/'/g, "\\'")}')">
           <div class="s-icon ${t.type}">${t.icon}</div>
-          <div class="s-name">${esc(shortenSessionKey(s.key))}</div>
+          <div class="s-name">${esc(shortenSessionKey(s.key, s))}</div>
           <div class="s-spark">${sparklineSVG(spark, 120, 24, 'var(--green)', false)}</div>
-          <div class="s-val">${s.messageCount || '—'}</div>
+          <div class="s-val">${s.messageCount || s.events || '—'}</div>
           <div class="s-val">${s.cost ? formatUsd(s.cost) : '—'}</div>
-          <div class="s-time">${relativeTime(s.lastActivity)}</div>
+          <div class="s-time">${relativeTime(s.lastActivity || s.last_active)}</div>
           <div class="s-expand" id="exp-${idx}">›</div>
         </div>
         <div class="session-detail" id="det-${idx}">
           <div class="session-detail-grid">
-            <div class="session-detail-stat"><div class="label">Messages</div><div class="val">${s.messageCount || 0}</div></div>
+            <div class="session-detail-stat"><div class="label">Events</div><div class="val">${s.events || s.messageCount || 0}</div></div>
             <div class="session-detail-stat"><div class="label">Cost</div><div class="val">${s.cost ? formatUsd(s.cost) : '$0.00'}</div></div>
             <div class="session-detail-stat"><div class="label">Duration</div><div class="val">${s.duration ? Math.round(s.duration / 60) + 'm' : '—'}</div></div>
             <div class="session-detail-stat"><div class="label">Model</div><div class="val" style="font-size:12px">${esc(s.model || '—')}</div></div>
@@ -1212,20 +1263,107 @@
           <div style="padding:12px 16px;font-size:11px;color:var(--text-3);font-family:var(--mono)">
             ${formatNum(s.tokens || 0)} tokens · ${esc(s.channel || 'unknown')} · ${esc(s.key)}
           </div>
+          <div id="timeline-${idx}" class="session-timeline" style="padding:0 16px 16px">
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:8px">Loading timeline...</div>
+          </div>
         </div>`;
       });
       html += '</div></div>';
       el.innerHTML = html;
     }
 
-    window.toggleDetail = (idx) => {
+    window.toggleDetail = async (idx, sessionKey) => {
       const det = document.getElementById('det-' + idx);
       const exp = document.getElementById('exp-' + idx);
+      const timeline = document.getElementById('timeline-' + idx);
       if (!det) return;
       const show = det.style.display !== 'block';
       det.style.display = show ? 'block' : 'none';
       if (exp) exp.style.transform = show ? 'rotate(90deg)' : '';
+      
+      // Load session timeline when expanding
+      if (show && timeline && sessionKey) {
+        await loadSessionTimeline(sessionKey, timeline);
+      }
     };
+
+    async function loadSessionTimeline(sessionKey, container) {
+      if (!sessionKey) return;
+      
+      try {
+        // Try to get session-specific events first
+        let sessionEvents = [];
+        if (state.demoMode) {
+          const data = await demoApi('/v1/events', { session: sessionKey });
+          sessionEvents = data?.events || [];
+        } else {
+          const data = await api('/v1/events', { session: sessionKey, limit: 50 });
+          sessionEvents = data?.events || [];
+        }
+        
+        // If no session-specific events, filter from general events
+        if (sessionEvents.length === 0) {
+          const allEvents = await fetchEvents(null, 100);
+          sessionEvents = allEvents.filter(e => e.session_key === sessionKey);
+        }
+        
+        if (sessionEvents.length === 0) {
+          container.innerHTML = '<div style="font-size:11px;color:var(--text-3);margin-bottom:8px">No events found</div>';
+          return;
+        }
+        
+        // Sort by timestamp
+        sessionEvents.sort((a, b) => a.ts - b.ts);
+        
+        let html = '<div style="font-size:11px;color:var(--text-2);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Event Timeline</div>';
+        html += '<div class="session-timeline-events">';
+        
+        sessionEvents.forEach(e => {
+          const time = new Date(e.ts * 1000);
+          const timeStr = time.toLocaleTimeString();
+          const kindColor = getEventKindColor(e.kind);
+          
+          // Format event data preview
+          let preview = '';
+          if (e.data) {
+            const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+            if (data.model) preview += `${data.model} `;
+            if (data.tokens) preview += `(${formatNum(data.tokens)} tok) `;
+            if (data.cost_usd) preview += `$${data.cost_usd.toFixed(3)} `;
+            if (data.status) preview += `→ ${data.status} `;
+            if (data.job && e.kind === 'cron') preview += `${data.job} `;
+            if (data.summary) preview += data.summary.substring(0, 60);
+            if (data.error) preview += `❌ ${data.error.substring(0, 60)}`;
+          }
+          
+          html += `<div class="timeline-event">
+            <span class="timeline-time">${timeStr}</span>
+            <span class="timeline-kind" style="color:${kindColor}">${e.kind}</span>
+            <span class="timeline-detail">${esc(preview || '—')}</span>
+          </div>`;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+      } catch (error) {
+        container.innerHTML = '<div style="font-size:11px;color:var(--red);margin-bottom:8px">Failed to load timeline</div>';
+        console.error('Failed to load session timeline:', error);
+      }
+    }
+
+    function getEventKindColor(kind) {
+      const colors = {
+        'session': 'var(--green)',
+        'cost': 'var(--cyan)',
+        'cron': 'var(--yellow)',
+        'heartbeat': 'var(--blue)',
+        'memory': 'var(--purple)',
+        'alert': 'var(--red)',
+        'session_start': 'var(--green)',
+        'session_end': 'var(--text-3)'
+      };
+      return colors[kind] || 'var(--text-2)';
+    }
 
     // ── Costs View ──────────────────────────────────────
     function renderCosts() {
@@ -1672,13 +1810,13 @@
       const now = Date.now()/1000;
       return [
         { key: 'agent:main:main', tokens: 85000, model: 'claude-opus-4', channel: 'imessage', lastActivity: now - 120, messageCount: 34, cost: 1.28, duration: 3600, _spark: generateSparkData(12) },
-        { key: 'agent:main:cron:builder-agent', tokens: 38000, model: 'claude-sonnet-4', channel: 'cron', lastActivity: now - 900, messageCount: 8, cost: 0.38, duration: 900, _spark: generateSparkData(12, 0.5) },
-        { key: 'agent:main:subagent:a1b2c3d4-e5f6-7890-abcd-ef1234567890', tokens: 42000, model: 'claude-opus-4', channel: 'subagent', lastActivity: now - 300, messageCount: 12, cost: 0.63, duration: 1800, _spark: generateSparkData(12) },
-        { key: 'agent:main:cron:memory-consolidation', tokens: 5000, model: 'claude-haiku', channel: 'cron', lastActivity: now - 1800, messageCount: 2, cost: 0.02, duration: 120, _spark: generateSparkData(12, 0.3) },
+        { key: 'agent:main:cron:builder-agent', tokens: 38000, model: 'claude-sonnet-4', channel: 'cron', lastActivity: now - 900, messageCount: 8, cost: 0.38, duration: 900, _spark: generateSparkData(12, 0.5), job_name: 'builder-agent' },
+        { key: 'agent:main:subagent:a1b2c3d4-e5f6-7890-abcd-ef1234567890', tokens: 42000, model: 'claude-opus-4', channel: 'subagent', lastActivity: now - 300, messageCount: 12, cost: 0.63, duration: 1800, _spark: generateSparkData(12), label: 'agentpulse-sessions' },
+        { key: 'agent:main:cron:memory-consolidation', tokens: 5000, model: 'claude-haiku', channel: 'cron', lastActivity: now - 1800, messageCount: 2, cost: 0.02, duration: 120, _spark: generateSparkData(12, 0.3), job_name: 'memory-consolidation' },
         { key: 'agent:main:imessage:direct:+14107461637', tokens: 25000, model: 'claude-sonnet-4', channel: 'imessage', lastActivity: now - 600, messageCount: 18, cost: 0.25, duration: 2400, _spark: generateSparkData(12) },
-        { key: 'agent:main:cron:session-cleanup', tokens: 3000, model: 'claude-haiku', channel: 'cron', lastActivity: now - 3600, messageCount: 1, cost: 0.01, duration: 60, _spark: generateSparkData(12, 0.2) },
-        { key: 'agent:main:cron:horror-content', tokens: 15000, model: 'claude-sonnet-4', channel: 'cron', lastActivity: now - 7200, messageCount: 6, cost: 0.15, duration: 480, _spark: generateSparkData(12, 0.6) },
-        { key: 'agent:main:cron:research-agent', tokens: 18000, model: 'gpt-4o', channel: 'cron', lastActivity: now - 5400, messageCount: 4, cost: 0.18, duration: 600, _spark: generateSparkData(12, 0.4) },
+        { key: 'agent:main:cron:session-cleanup', tokens: 3000, model: 'claude-haiku', channel: 'cron', lastActivity: now - 3600, messageCount: 1, cost: 0.01, duration: 60, _spark: generateSparkData(12, 0.2), job_name: 'session-cleanup' },
+        { key: 'agent:main:cron:horror-content', tokens: 15000, model: 'claude-sonnet-4', channel: 'cron', lastActivity: now - 7200, messageCount: 6, cost: 0.15, duration: 480, _spark: generateSparkData(12, 0.6), job_name: 'horror-content' },
+        { key: 'agent:main:cron:research-agent', tokens: 18000, model: 'gpt-4o', channel: 'cron', lastActivity: now - 5400, messageCount: 4, cost: 0.18, duration: 600, _spark: generateSparkData(12, 0.4), job_name: 'research-agent' },
       ];
     }
 
@@ -1719,15 +1857,67 @@
       }
       if (path === '/v1/events') {
         const now = Date.now()/1000;
-        return { events: Array.from({ length: 30 }, (_, i) => ({
-          id: i+1,
-          kind: ['cost','session_start','heartbeat','cron','memory','alert'][i%6],
-          ts: now - i*300,
-          session_key: `agent:main:${i%3===0?'main':i%3===1?'cron:builder-agent':'subagent:'+i}`,
-          data: { model: ['claude-opus-4','claude-sonnet-4','gpt-4o','claude-haiku'][i%4], tokens: 5000+i*200, cost_usd: 0.10+i*0.02 },
-        })), count: 30 };
+        const sessionFilter = params.session;
+        let events;
+        
+        if (sessionFilter) {
+          // Generate session-specific timeline events
+          events = generateDemoTimelineEvents(sessionFilter, now);
+        } else {
+          // General events list
+          events = Array.from({ length: 30 }, (_, i) => ({
+            id: i+1,
+            kind: ['cost','session_start','heartbeat','cron','memory','alert'][i%6],
+            ts: now - i*300,
+            session_key: `agent:main:${i%3===0?'main':i%3===1?'cron:builder-agent':'subagent:'+i}`,
+            data: { model: ['claude-opus-4','claude-sonnet-4','gpt-4o','claude-haiku'][i%4], tokens: 5000+i*200, cost_usd: 0.10+i*0.02 },
+          }));
+        }
+        
+        return { events, count: events.length };
       }
       return null;
+    }
+
+    function generateDemoTimelineEvents(sessionKey, baseTs) {
+      const events = [];
+      const isMain = sessionKey.includes('main:main');
+      const isCron = sessionKey.includes('cron:');
+      const isSubagent = sessionKey.includes('subagent:');
+      
+      // Generate different event patterns based on session type
+      if (isCron) {
+        const jobName = sessionKey.split(':cron:')[1] || 'unknown';
+        // Cron job timeline: start, progress, completion
+        events.push(
+          { kind: 'cron', ts: baseTs - 300, session_key: sessionKey, data: { job: jobName, status: 'started', summary: 'Job initiated' } },
+          { kind: 'cost', ts: baseTs - 280, session_key: sessionKey, data: { model: 'claude-sonnet-4', tokens: 1200, cost_usd: 0.012 } },
+          { kind: 'cron', ts: baseTs - 250, session_key: sessionKey, data: { job: jobName, status: 'progress', summary: 'Processing data...' } },
+          { kind: 'cost', ts: baseTs - 220, session_key: sessionKey, data: { model: 'claude-sonnet-4', tokens: 3400, cost_usd: 0.034 } },
+          { kind: 'cron', ts: baseTs - 180, session_key: sessionKey, data: { job: jobName, status: 'ok', summary: 'Completed successfully', duration_ms: 120000 } }
+        );
+      } else if (isMain) {
+        // Main session: conversation flow
+        events.push(
+          { kind: 'session_start', ts: baseTs - 1200, session_key: sessionKey, data: { type: 'main', channel: 'imessage' } },
+          { kind: 'cost', ts: baseTs - 1100, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 2500, cost_usd: 0.075 } },
+          { kind: 'memory', ts: baseTs - 900, session_key: sessionKey, data: { action: 'updated', file: 'SESSION.md' } },
+          { kind: 'cost', ts: baseTs - 800, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 4200, cost_usd: 0.126 } },
+          { kind: 'cost', ts: baseTs - 600, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 1800, cost_usd: 0.054 } },
+          { kind: 'heartbeat', ts: baseTs - 300, session_key: sessionKey, data: { status: 'active' } }
+        );
+      } else if (isSubagent) {
+        // Subagent: focused task execution
+        events.push(
+          { kind: 'session_start', ts: baseTs - 600, session_key: sessionKey, data: { type: 'subagent', task: 'Fix cron session names' } },
+          { kind: 'cost', ts: baseTs - 550, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 1500, cost_usd: 0.045 } },
+          { kind: 'memory', ts: baseTs - 400, session_key: sessionKey, data: { action: 'read', file: 'api/src/index.ts' } },
+          { kind: 'cost', ts: baseTs - 300, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 2800, cost_usd: 0.084 } },
+          { kind: 'session_end', ts: baseTs - 120, session_key: sessionKey, data: { status: 'completed', summary: 'Task finished successfully' } }
+        );
+      }
+      
+      return events;
     }
 
     // ── Show/Hide App ───────────────────────────────────

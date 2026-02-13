@@ -53,6 +53,9 @@ def collect_sessions() -> list:
                 # Try to map UUID to job name
                 job_name = cron_id_to_name.get(cron_part, cron_part)
         
+        # Get sub-agent label if available
+        label = s.get("label")
+        
         session_data = {
             "type": s.get("type", "unknown"),
             "channel": s.get("channel", "unknown"),
@@ -65,12 +68,43 @@ def collect_sessions() -> list:
         if job_name:
             session_data["job_name"] = job_name
         
+        # Add label for sub-agent sessions
+        if label:
+            session_data["label"] = label
+        
         events.append({
             "kind": "session",
             "ts": time.time(),
             "session": session_key,
             "data": session_data,
         })
+    
+    # Also emit session events for all known cron UUIDs so API can resolve names
+    # even for sessions that aren't currently active
+    seen_cron_uuids = set()
+    for e in events:
+        if ":cron:" in e.get("session", ""):
+            parts = e["session"].split(":cron:")
+            if len(parts) > 1:
+                seen_cron_uuids.add(parts[1].split(":")[0])
+    
+    for cron_id, cron_name in cron_id_to_name.items():
+        if cron_id not in seen_cron_uuids:
+            cron_key = f"agent:main:cron:{cron_id}"
+            events.append({
+                "kind": "session",
+                "ts": time.time(),
+                "session": cron_key,
+                "data": {
+                    "type": "cron",
+                    "channel": "cron",
+                    "tokens": 0,
+                    "age_min": 0,
+                    "last_message": "",
+                    "job_name": cron_name,
+                },
+            })
+    
     return events
 
 
@@ -113,10 +147,12 @@ def collect_costs() -> list:
 
 def collect_crons() -> list:
     data = run_json(f"{SCRIPTS}/marcus-cron --json")
-    if not data or "jobs" not in data:
+    if not data:
         return []
+    # Handle both list format and {"jobs": [...]} format
+    jobs = data if isinstance(data, list) else data.get("jobs", [])
     events = []
-    for j in data["jobs"]:
+    for j in jobs:
         job_name = j.get("name")
         # Skip jobs with null/None names to avoid garbage data
         if not job_name or job_name == "null":
@@ -175,6 +211,7 @@ def send_heartbeat(url: str, api_key: str) -> bool:
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            "User-Agent": "AgentPulse-Reporter/1.0",
         },
         method="POST",
     )

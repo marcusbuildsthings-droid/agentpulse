@@ -633,7 +633,7 @@ export default {
 
         // Model costs
         env.DB.prepare(
-          "SELECT json_extract(data, '$.model') as model, SUM(json_extract(data, '$.cost_usd')) as cost, SUM(COALESCE(json_extract(data, '$.tokens'),0)) as tokens FROM events WHERE agent_id = ? AND kind = 'cost' AND ts >= ? GROUP BY model ORDER BY cost DESC"
+          "SELECT json_extract(data, '$.model') as model, SUM(json_extract(data, '$.cost_usd')) as cost, SUM(COALESCE(json_extract(data, '$.tokens'),0)) as tokens FROM events WHERE agent_id = ? AND kind = 'cost' AND json_extract(data, '$.model') IS NOT NULL AND ts >= ? GROUP BY model ORDER BY cost DESC"
         ).bind(agent.id, sinceTs).all(),
 
         // Daily spend from cost_daily
@@ -676,7 +676,7 @@ export default {
     // ── GET /v1/sessions ─────────────────────────────────────
     if (path === "/v1/sessions" && req.method === "GET") {
       const since = url.searchParams.get("since") || String(Date.now() / 1000 - 86400);
-      const [rows, costRows] = await Promise.all([
+      const [rows, costRows, jobRows] = await Promise.all([
         env.DB.prepare(
           "SELECT session_key, MIN(ts) as started, MAX(ts) as last_active, COUNT(*) as events " +
           "FROM events WHERE agent_id = ? AND session_key IS NOT NULL AND ts >= ? " +
@@ -687,14 +687,46 @@ export default {
           "FROM events WHERE agent_id = ? AND kind = 'cost' AND session_key IS NOT NULL AND ts >= ? " +
           "GROUP BY session_key"
         ).bind(agent.id, parseFloat(since)).all(),
+        // Get job names and labels from session events (reporter includes job_name/label in session data)
+        env.DB.prepare(
+          "SELECT session_key, json_extract(data, '$.job_name') as job_name, json_extract(data, '$.label') as label, MAX(json_extract(data, '$.type')) as session_type " +
+          "FROM events WHERE agent_id = ? AND kind = 'session' AND session_key IS NOT NULL AND ts >= ? AND (json_extract(data, '$.job_name') IS NOT NULL OR json_extract(data, '$.label') IS NOT NULL) " +
+          "GROUP BY session_key"
+        ).bind(agent.id, parseFloat(since)).all(),
       ]);
       const costMap: Record<string, any> = {};
       (costRows.results as any[]).forEach((r: any) => { costMap[r.session_key] = { cost: r.cost || 0, tokens: r.tokens || 0, model: r.model || '' }; });
+      const jobMap: Record<string, any> = {};
+      (jobRows.results as any[]).forEach((r: any) => { jobMap[r.session_key] = { job_name: r.job_name, label: r.label, session_type: r.session_type }; });
+
+      // Helper: resolve job_name for cron sessions by checking parent UUID
+      function resolveJobName(key: string): string | null {
+        if (jobMap[key]?.job_name) return jobMap[key].job_name;
+        // For :run: sub-sessions, try the parent cron key
+        const runIdx = key.indexOf(':run:');
+        if (runIdx > 0) {
+          const parentKey = key.substring(0, runIdx);
+          if (jobMap[parentKey]?.job_name) return jobMap[parentKey].job_name;
+        }
+        // Try matching any jobMap entry that shares the same cron UUID
+        const cronMatch = key.match(/:cron:([0-9a-f-]+)/);
+        if (cronMatch) {
+          const uuid = cronMatch[1];
+          for (const [k, v] of Object.entries(jobMap)) {
+            if (k.includes(uuid) && v.job_name) return v.job_name;
+          }
+        }
+        return null;
+      }
+
       const sessions = (rows.results as any[]).map((r: any) => ({
         ...r,
         cost: costMap[r.session_key]?.cost || 0,
         tokens: costMap[r.session_key]?.tokens || 0,
         model: costMap[r.session_key]?.model || '',
+        job_name: resolveJobName(r.session_key),
+        label: jobMap[r.session_key]?.label || null,
+        session_type: jobMap[r.session_key]?.session_type || null,
       }));
       return json({ sessions }, 200, req, env);
     }

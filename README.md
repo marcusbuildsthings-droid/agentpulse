@@ -12,6 +12,7 @@ AgentPulse is an open-source, lightweight, and affordable monitoring dashboard b
 *   **Tool Call Visibility:** Understand which tools your agent is using, with what inputs, and their outputs.
 *   **Error Detection & Debugging:** Quickly pinpoint where and why your agent is failing.
 *   **Performance Metrics:** Gain insights into agent latency, cost, and overall efficiency.
+*   **Smart Alerting:** Get notified via email or webhook when costs spike, cron jobs fail, or thresholds are exceeded.
 *   **Lightweight Python SDK:** Integrate with your existing agent framework in minutes.
 *   **Designed for Indie Builders:** Powerful features without the overwhelming complexity or cost of enterprise solutions.
 
