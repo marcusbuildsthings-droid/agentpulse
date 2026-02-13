@@ -31,19 +31,45 @@ def collect_sessions() -> list:
     data = run_json(f"{SCRIPTS}/marcus-sessions --json --all")
     if not data or "sessions" not in data:
         return []
+    
+    # Get cron job ID to name mapping
+    cron_data = run_json(f"{SCRIPTS}/marcus-cron --json")
+    cron_id_to_name = {}
+    if cron_data:
+        for job in cron_data:
+            if job.get("id") and job.get("name"):
+                cron_id_to_name[job["id"]] = job["name"]
+    
     events = []
     for s in data["sessions"]:
+        session_key = s.get("key", "unknown")
+        
+        # Extract job name from cron sessions using ID mapping
+        job_name = None
+        if ":cron:" in session_key:
+            parts = session_key.split(":cron:")
+            if len(parts) > 1:
+                cron_part = parts[1].split(":")[0]  # Get first part after :cron:
+                # Try to map UUID to job name
+                job_name = cron_id_to_name.get(cron_part, cron_part)
+        
+        session_data = {
+            "type": s.get("type", "unknown"),
+            "channel": s.get("channel", "unknown"),
+            "tokens": s.get("tokens", 0),
+            "age_min": s.get("age_min", 0),
+            "last_message": s.get("last_message", "")[:100],
+        }
+        
+        # Add job name for cron sessions
+        if job_name:
+            session_data["job_name"] = job_name
+        
         events.append({
             "kind": "session",
             "ts": time.time(),
-            "session": s.get("key", "unknown"),
-            "data": {
-                "type": s.get("type", "unknown"),
-                "channel": s.get("channel", "unknown"),
-                "tokens": s.get("tokens", 0),
-                "age_min": s.get("age_min", 0),
-                "last_message": s.get("last_message", "")[:100],
-            },
+            "session": session_key,
+            "data": session_data,
         })
     return events
 
@@ -54,27 +80,32 @@ def collect_costs() -> list:
         return []
     events = []
     for s in data.get("sessions", []):
-        cost = s.get("estimated_cost", 0)
-        if cost > 0:
+        tokens = s.get("tokens") or 0
+        if tokens > 0:
+            # Estimate cost from tokens if not provided (rough Claude estimate)
+            cost = s.get("cost", 0) or s.get("estimated_cost", 0)
+            session_key = s.get("key", "unknown")
             events.append({
                 "kind": "cost",
                 "ts": time.time(),
-                "session": s.get("key", "unknown"),
+                "session": session_key,  # This populates the session_key field
                 "data": {
                     "model": s.get("model", "unknown"),
                     "input_tokens": s.get("input_tokens", 0),
                     "output_tokens": s.get("output_tokens", 0),
-                    "cost": cost,
+                    "tokens": tokens,
+                    "cost_usd": cost,
+                    "session_key": session_key,  # Also include in data for compatibility
                 },
             })
-    if "total" in data:
+    if "totals" in data:  # Fixed: was "total", should be "totals" based on marcus-costs output
         events.append({
             "kind": "metric",
             "ts": time.time(),
             "data": {
                 "name": "total_cost",
-                "value": data["total"].get("estimated_cost", 0),
-                "total_tokens": data["total"].get("tokens", 0),
+                "value": data["totals"].get("estimatedCost", 0),
+                "total_tokens": data["totals"].get("totalTokens", 0),
             },
         })
     return events
@@ -86,11 +117,15 @@ def collect_crons() -> list:
         return []
     events = []
     for j in data["jobs"]:
+        job_name = j.get("name")
+        # Skip jobs with null/None names to avoid garbage data
+        if not job_name or job_name == "null":
+            continue
         events.append({
             "kind": "cron",
             "ts": time.time(),
             "data": {
-                "job": j.get("name", "unknown"),
+                "job": job_name,
                 "enabled": j.get("enabled", False),
                 "last_status": j.get("last_status", "unknown"),
                 "last_run": j.get("last_run"),
@@ -132,6 +167,27 @@ def collect_health() -> list:
     }]
 
 
+def send_heartbeat(url: str, api_key: str) -> bool:
+    """Report gateway liveness to AgentPulse."""
+    req = urllib.request.Request(
+        f"{url}/v1/heartbeat",
+        data=b"{}",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            json.loads(resp.read())
+            print("  Heartbeat sent ✓")
+            return True
+    except Exception as e:
+        print(f"  Heartbeat failed: {e}")
+        return False
+
+
 def send_events(url: str, api_key: str, events: list) -> bool:
     if not events:
         return True
@@ -142,6 +198,7 @@ def send_events(url: str, api_key: str, events: list) -> bool:
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            "User-Agent": "openclaw-reporter/1.0",
         },
         method="POST",
     )
@@ -184,6 +241,8 @@ def main():
         for e in all_events:
             print(f"  {e['kind']}: {json.dumps(e['data'])[:120]}")
     else:
+        print("Sending heartbeat...")
+        send_heartbeat(args.url, args.api_key)
         send_events(args.url, args.api_key, all_events)
 
 

@@ -343,6 +343,25 @@
     .badge.info { background: var(--blue-muted); color: var(--blue); }
     .badge.info::before { background: var(--blue); }
 
+    /* Gateway status pill */
+    .gateway-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--mono);
+      letter-spacing: 0.03em;
+    }
+    .gateway-pill .gw-dot {
+      width: 6px; height: 6px;
+    }
+    .gateway-pill.online { background: var(--green-muted); color: var(--green); }
+    .gateway-pill.online .gw-dot { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
+    .gateway-pill.offline { background: rgba(255,255,255,0.04); color: var(--text-3); }
+    .gateway-pill.offline .gw-dot { background: var(--text-3); }
+
     /* ─── Event Stream ─────────────────────────────────── */
     .event-stream { max-height: 500px; overflow-y: auto; }
     .event-row {
@@ -400,7 +419,7 @@
       justify-content: center;
       font-size: 12px;
     }
-    .session-item .s-icon.main { background: var(--green-muted); color: var(--green); }
+    .session-item .s-icon.s-main { background: var(--green-muted); color: var(--green); min-height: unset; }
     .session-item .s-icon.cron { background: var(--yellow-muted); color: var(--yellow); }
     .session-item .s-icon.sub { background: var(--blue-muted); color: var(--blue); }
     .session-item .s-icon.dm { background: var(--accent-muted); color: var(--accent); }
@@ -752,7 +771,7 @@
       <div class="step-label">▸ Step 3 — Connect</div>
       <div style="margin-bottom:8px">
         <label style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">API Endpoint</label>
-        <input id="ob-url" type="url" placeholder="https://api.agentpulse.dev" style="background:var(--bg-2);border:1px solid var(--border);padding:10px 14px;color:var(--green);width:100%;font-size:13px;font-family:var(--mono);outline:none">
+        <input id="ob-url" type="url" value="https://agentpulse-api.marcus-builds-things.workers.dev" style="background:var(--bg-2);border:1px solid var(--border);padding:10px 14px;color:var(--green);width:100%;font-size:13px;font-family:var(--mono);outline:none">
       </div>
       <div style="margin-bottom:16px">
         <label style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">API Key</label>
@@ -877,13 +896,22 @@
       </div>`;
     }
 
+    function gatewayPill() {
+      const gs = state.stats?.gateway_status;
+      if (!gs && !state.demoMode) return '';
+      const alive = state.demoMode ? true : gs?.alive;
+      const cls = alive ? 'online' : 'offline';
+      const label = alive ? 'Gateway: Online' : 'Gateway: Offline';
+      return `<span class="gateway-pill ${cls}"><span class="gw-dot"></span>${label}</span>`;
+    }
+
     function setHeader(title, actions = '') {
-      document.getElementById('main-header').innerHTML = `<h2>${title}</h2><div>${actions}</div>`;
+      document.getElementById('main-header').innerHTML = `<h2>${title}</h2><div style="display:flex;align-items:center;gap:12px">${gatewayPill()}${actions}</div>`;
     }
 
     function getSessionType(key) {
       if (!key) return { type:'other', icon:'⚫', label:'Other' };
-      if (key === 'agent:main:main') return { type:'main', icon:'▶', label:'Main' };
+      if (key === 'agent:main:main') return { type:'s-main', icon:'▶', label:'Main' };
       if (key.includes(':cron:')) return { type:'cron', icon:'◷', label:'Cron' };
       if (key.includes(':subagent:') || key.includes(':sub:')) return { type:'sub', icon:'◇', label:'Sub' };
       if (key.includes(':dm:') || key.includes(':imessage:') || key.includes(':telegram:')) return { type:'dm', icon:'◈', label:'DM' };
@@ -893,7 +921,41 @@
     function shortenSessionKey(key) {
       if (!key) return '—';
       let s = key.replace(/^agent:main:/, '');
+      
+      // Extract cron job names: "cron:job-name" → "job-name"
+      const cronMatch = s.match(/^cron:([^:]+)/);
+      if (cronMatch) {
+        return cronMatch[1]; // Return just the job name
+      }
+      
+      // Extract subagent names: show "Sub-agent" for subagent sessions
+      if (s.includes('subagent:')) {
+        return 'Sub-agent';
+      }
+      
+      // Mask phone numbers for PII protection
+      s = s.replace(/(\+1[0-9]{10})/g, (match) => {
+        const lastFour = match.slice(-4);
+        return `•••${lastFour}`;
+      });
+      
+      // Also handle other phone formats
+      s = s.replace(/([0-9]{10,})/g, (match) => {
+        const lastFour = match.slice(-4);
+        return `•••${lastFour}`;
+      });
+      
+      // Shorten UUIDs
       s = s.replace(/([a-f0-9]{8})-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '$1…');
+      
+      // Format specific channel types for better readability
+      if (s.includes('imessage:dm:•••')) {
+        return s.replace('imessage:dm:', 'iMessage: ');
+      }
+      if (s.includes('imessage:direct:•••')) {
+        return s.replace('imessage:direct:', 'iMessage: ');
+      }
+      
       return s || key;
     }
 
@@ -986,7 +1048,7 @@
           <div class="panel-header">Connection</div>
           <div class="config-panel">
             <label>API Endpoint</label>
-            <input id="cfg-url" type="url" placeholder="https://api.agentpulse.dev" value="${esc(state.apiUrl)}">
+            <input id="cfg-url" type="url" placeholder="https://agentpulse-api.marcus-builds-things.workers.dev" value="${esc(state.apiUrl)}">
             <label>API Key</label>
             <input id="cfg-key" type="text" placeholder="ap_..." value="${esc(state.apiKey)}">
             <div style="display:flex;gap:8px;margin-top:4px">
@@ -1097,22 +1159,19 @@
       if (state.demoMode) {
         sessions = generateDemoSessions();
       } else {
-        const [startEvents, msgEvents] = await Promise.all([fetchEvents('session_start', 50), fetchEvents('session_message', 100)]);
-        const map = {};
-        startEvents.forEach(e => {
-          (e.data?.active_sessions || []).forEach(s => {
-            const k = s.key;
-            if (!map[k]) map[k] = { key: k, tokens: s.tokens||0, model: s.model||'', channel: s.channel||'', lastActivity: e.ts, messageCount: 0, cost: 0, duration: 0 };
-            else { map[k].tokens = Math.max(map[k].tokens, s.tokens||0); if (e.ts > map[k].lastActivity) map[k].lastActivity = e.ts; }
-          });
-        });
-        msgEvents.forEach(e => {
-          const k = e.session_key || e.data?.session;
-          if (!k) return;
-          if (!map[k]) map[k] = { key: k, tokens: 0, model: e.data?.model||'', channel: '', lastActivity: e.ts, messageCount: 1, cost: 0, duration: 0 };
-          else { map[k].messageCount++; if (e.ts > map[k].lastActivity) { map[k].lastActivity = e.ts; map[k].model = e.data?.model || map[k].model; } }
-        });
-        sessions = Object.values(map);
+        const since = state.period === '7d' ? Date.now()/1000 - 604800 : state.period === '30d' ? Date.now()/1000 - 2592000 : Date.now()/1000 - 86400;
+        const data = await api('/v1/sessions', { since: since.toString() });
+        const rawSessions = data?.sessions || [];
+        sessions = rawSessions.map(s => ({
+          key: s.session_key,
+          tokens: s.tokens || 0,
+          model: s.model || '',
+          channel: '',
+          lastActivity: s.last_active,
+          messageCount: s.events || 0,
+          cost: s.cost || 0,
+          duration: (s.last_active || 0) - (s.started || 0),
+        }));
       }
 
       sessions.sort((a, b) => b.lastActivity - a.lastActivity);
@@ -1175,9 +1234,9 @@
       setHeader('Costs', periodSelector());
       const costColor = s.cost?.usd > 10 ? 'red' : s.cost?.usd > 5 ? 'yellow' : 'green';
 
-      const models = s._modelCosts || generateDemoModelCosts();
-      const dailySpend = s._dailySpend || generateDemoDailySpend();
-      const topSessions = s._topSessions || generateDemoTopSessions();
+      const models = state.demoMode ? generateDemoModelCosts() : (s.model_costs && s.model_costs.length ? s.model_costs : []);
+      const dailySpend = state.demoMode ? generateDemoDailySpend() : (s.daily_spend && s.daily_spend.length ? s.daily_spend.map(d => ({ label: d.date.slice(5), value: d.cost })) : []);
+      const topSessions = state.demoMode ? generateDemoTopSessions() : (s.top_sessions || []);
 
       return `
         <div class="grid grid-3">
@@ -1264,25 +1323,68 @@
 
       const jobs = {};
       (s.cron_health || []).forEach(j => {
-        if (!jobs[j.job]) jobs[j.job] = { ok: 0, fail: 0 };
+        if (!jobs[j.job]) jobs[j.job] = { ok: 0, fail: 0, last_run_ts: null, last_duration_ms: null, last_error: null, last_summary: null, last_status: null };
         if (j.status === 'ok') jobs[j.job].ok = j.count; else jobs[j.job].fail += j.count;
+        if (j.last_run_ts) {
+          jobs[j.job].last_run_ts = j.last_run_ts;
+          jobs[j.job].last_duration_ms = j.last_duration_ms;
+          jobs[j.job].last_error = j.last_error;
+          jobs[j.job].last_summary = j.last_summary;
+          jobs[j.job].last_status = j.last_status;
+        }
       });
 
+      const jobEntries = Object.entries(jobs);
+
       return `<div class="panel">
-        <div class="panel-header">Job Health <span class="panel-count">${Object.keys(jobs).length}</span></div>
+        <div class="panel-header">Job Health <span class="panel-count">${jobEntries.length}</span></div>
         <table>
-          <thead><tr><th>Job</th><th style="text-align:right">Success</th><th style="text-align:right">Failed</th><th style="text-align:right">Status</th></tr></thead>
+          <thead><tr><th>Job</th><th style="text-align:right">Success</th><th style="text-align:right">Failed</th><th style="text-align:right">Last Run</th><th style="text-align:right">Duration</th><th style="text-align:right">Status</th></tr></thead>
           <tbody>
-            ${Object.entries(jobs).map(([name, j]) => `<tr>
+            ${jobEntries.map(([name, j], idx) => `<tr style="cursor:pointer" onclick="toggleCronDetail('cron-det-${idx}')">
               <td><span style="font-family:var(--mono);font-size:12px">${esc(name)}</span></td>
               <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--green)">${j.ok}</td>
               <td style="text-align:right;font-variant-numeric:tabular-nums;color:${j.fail ? 'var(--red)' : 'var(--text-3)'}">${j.fail}</td>
+              <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-3)">${j.last_run_ts ? relativeTime(j.last_run_ts) + ' ago' : '—'}</td>
+              <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-3)">${j.last_duration_ms != null ? (j.last_duration_ms/1000).toFixed(1) + 's' : '—'}</td>
               <td style="text-align:right"><span class="badge ${j.fail > 0 ? 'fail' : 'ok'}">${j.fail > 0 ? 'Issues' : 'Healthy'}</span></td>
-            </tr>`).join('') || '<tr><td colspan="4" style="color:var(--text-3)">No cron data</td></tr>'}
+            </tr>
+            <tr id="cron-det-${idx}" style="display:none">
+              <td colspan="6" style="background:var(--bg-1);padding:12px 20px">
+                <div style="font-size:11px;color:var(--text-3);font-family:var(--mono);line-height:1.8">
+                  ${j.last_summary ? '<div><span style="color:var(--text-2)">Last output:</span> ' + esc(j.last_summary) + '</div>' : ''}
+                  ${j.last_error ? '<div style="color:var(--red)"><span>Last error:</span> ' + esc(j.last_error) + '</div>' : ''}
+                  ${j.last_run_ts ? '<div><span style="color:var(--text-2)">Last run:</span> ' + esc(new Date(j.last_run_ts * 1000).toLocaleString()) + '</div>' : ''}
+                  <div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();loadCronRuns('${esc(name)}','cron-runs-${idx}')">Load recent runs</button></div>
+                  <div id="cron-runs-${idx}"></div>
+                </div>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="6" style="color:var(--text-3)">No cron data</td></tr>'}
           </tbody>
         </table>
       </div>`;
     }
+
+    window.toggleCronDetail = (id) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
+    };
+
+    window.loadCronRuns = async (jobName, targetId) => {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      el.innerHTML = '<div style="padding:8px;color:var(--text-3)">Loading...</div>';
+      const events = await fetchEvents('cron', 50);
+      const runs = events.filter(e => e.data?.job === jobName).slice(0, 10);
+      if (!runs.length) { el.innerHTML = '<div style="padding:8px;color:var(--text-3)">No runs found</div>'; return; }
+      el.innerHTML = '<table style="margin-top:8px"><thead><tr><th>Time</th><th>Status</th><th style="text-align:right">Duration</th><th>Summary</th></tr></thead><tbody>' +
+        runs.map(r => `<tr>
+          <td style="font-size:11px">${esc(new Date(r.ts*1000).toLocaleString())}</td>
+          <td><span class="badge ${r.data.status === 'ok' ? 'ok' : 'fail'}">${esc(r.data.status)}</span></td>
+          <td style="text-align:right;font-family:var(--mono);font-size:11px">${r.data.duration_ms != null ? (r.data.duration_ms/1000).toFixed(1) + 's' : '—'}</td>
+          <td style="font-size:11px;color:var(--text-3);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.data.summary || r.data.error || '—')}</td>
+        </tr>`).join('') + '</tbody></table>';
+    };
 
     // ── Events View ─────────────────────────────────────
     async function renderEventsView() {
@@ -1326,7 +1428,14 @@
               </select>
               <input id="a-threshold" type="number" step="any" placeholder="Threshold">
             </div>
-            <input id="a-webhook" placeholder="Webhook URL (https://...)">
+            <div class="form-row">
+              <select id="a-channel" style="min-width:120px" onchange="toggleChannelInputs()">
+                <option value="email">📧 Email</option>
+                <option value="webhook">🪝 Webhook</option>
+              </select>
+            </div>
+            <input id="a-webhook" placeholder="Webhook URL (https://...)" style="display:none">
+            <div id="a-email-info" style="color:var(--text-2);font-size:12px;margin-top:4px">Alerts will be sent to your registered email address.</div>
             <div style="display:flex;gap:8px">
               <button class="btn btn-primary btn-sm" onclick="createAlert()">Create</button>
               <button class="btn btn-ghost btn-sm" onclick="document.getElementById('create-alert-form').style.display='none'">Cancel</button>
@@ -1339,23 +1448,55 @@
       await loadAlertHistory();
     }
 
-    window.showCreateAlert = () => { document.getElementById('create-alert-form').style.display = 'block'; };
+    window.showCreateAlert = () => { 
+      document.getElementById('create-alert-form').style.display = 'block';
+      toggleChannelInputs(); // Initialize the form state
+    };
+
+    window.toggleChannelInputs = () => {
+      const channel = document.getElementById('a-channel').value;
+      const webhookInput = document.getElementById('a-webhook');
+      const emailInfo = document.getElementById('a-email-info');
+      
+      if (channel === 'webhook') {
+        webhookInput.style.display = 'block';
+        emailInfo.style.display = 'none';
+      } else {
+        webhookInput.style.display = 'none';
+        emailInfo.style.display = 'block';
+      }
+    };
 
     window.createAlert = async () => {
       const name = document.getElementById('a-name').value;
       const metric = document.getElementById('a-metric').value;
       const op = document.getElementById('a-op').value;
       const threshold = parseFloat(document.getElementById('a-threshold').value);
+      const channel = document.getElementById('a-channel').value;
       const webhook_url = document.getElementById('a-webhook').value;
+      
       if (!name || isNaN(threshold)) { alert('Fill in name and threshold'); return; }
+      if (channel === 'webhook' && !webhook_url) { alert('Webhook URL required for webhook alerts'); return; }
+      
+      const alertData = { 
+        rule_name: name, 
+        condition: { metric, op, threshold }, 
+        channel,
+        ...(channel === 'webhook' && { webhook_url })
+      };
+      
       if (state.demoMode) {
-        demoAlerts.push({ id: Date.now(), rule_name: name, condition: { metric, op, threshold }, channel: 'webhook', webhook_url, enabled: true });
+        demoAlerts.push({ id: Date.now(), ...alertData, enabled: true });
         document.getElementById('create-alert-form').style.display = 'none';
         await loadAlerts();
         return;
       }
       try {
-        const res = await fetch(state.apiUrl + '/v1/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + state.apiKey }, body: JSON.stringify({ rule_name: name, condition: { metric, op, threshold }, channel: 'webhook', webhook_url }) });
+        const res = await fetch(state.apiUrl + '/v1/alerts', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + state.apiKey }, 
+          body: JSON.stringify(alertData)
+        });
         if (!res.ok) { const e = await res.json(); alert(e.error); return; }
         document.getElementById('create-alert-form').style.display = 'none';
         await loadAlerts();
@@ -1571,9 +1712,9 @@
           ],
           _eventTimeline: generateSparkData(state.period === '30d' ? 30 : state.period === '7d' ? 7 : 24),
           _costTimeline: generateSparkData(state.period === '30d' ? 30 : state.period === '7d' ? 7 : 24, 0.6),
-          _modelCosts: generateDemoModelCosts(),
-          _dailySpend: generateDemoDailySpend(),
-          _topSessions: generateDemoTopSessions(),
+          model_costs: generateDemoModelCosts(),
+          daily_spend: generateDemoDailySpend().map(d => ({ date: d.label, cost: d.value })),
+          top_sessions: generateDemoTopSessions(),
         };
       }
       if (path === '/v1/events') {

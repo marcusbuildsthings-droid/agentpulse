@@ -183,8 +183,11 @@ def patch(enqueue_fn: Any, capture_messages: bool = False) -> None:
     _enqueue_fn = enqueue_fn
     _capture_messages = capture_messages
 
-    # Sync
+    # Sync — detect conflicts
     _original_create = msg_mod.Messages.create
+    if getattr(_original_create, '_agentpulse_patched', False):
+        logger.warning("Anthropic Messages.create already patched by AgentPulse, skipping")
+        return
 
     def patched_create(self: Any, *args: Any, **kwargs: Any) -> Any:
         start = time.monotonic()
@@ -217,6 +220,7 @@ def patch(enqueue_fn: Any, capture_messages: bool = False) -> None:
             _enqueue_fn(event)
         return response
 
+    patched_create._agentpulse_patched = True  # type: ignore[attr-defined]
     msg_mod.Messages.create = patched_create  # type: ignore[assignment]
 
     # Async
@@ -253,6 +257,7 @@ def patch(enqueue_fn: Any, capture_messages: bool = False) -> None:
                 _enqueue_fn(event)
             return response
 
+        patched_async_create._agentpulse_patched = True  # type: ignore[attr-defined]
         msg_mod.AsyncMessages.create = patched_async_create  # type: ignore[assignment]
     except AttributeError:
         pass

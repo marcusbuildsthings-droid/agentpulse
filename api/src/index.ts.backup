@@ -6,7 +6,6 @@
 interface Env {
   DB: D1Database;
   CORS_ORIGIN: string;
-  RESEND_API_KEY?: string;
 }
 
 interface IngestPayload {
@@ -119,55 +118,6 @@ function isValidTs(ts: unknown): ts is number {
   return ts >= min && ts <= max;
 }
 
-// ── Email Helper ──────────────────────────────────────
-async function sendAlertEmail(
-  env: Env, 
-  to: string, 
-  alertName: string, 
-  metric: string, 
-  value: number, 
-  threshold: number, 
-  agentName: string
-): Promise<void> {
-  if (!env.RESEND_API_KEY || !to) return;
-
-  const subject = `🚨 AgentPulse Alert: ${alertName}`;
-  const body = `
-Your agent "${agentName}" has triggered an alert:
-
-Alert: ${alertName}
-Metric: ${metric}
-Current Value: ${value}
-Threshold: ${threshold}
-Triggered At: ${new Date().toISOString()}
-
-Check your AgentPulse dashboard for more details:
-https://agentpulse-dashboard.pages.dev/
-
-—
-AgentPulse Monitoring
-  `.trim();
-
-  try {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "AgentPulse <alerts@marcusbuildsthings.dev>",
-        to: [to],
-        subject,
-        text: body,
-      }),
-    });
-  } catch (error) {
-    // Silent fail - don't let email failures block the alert system
-    console.error("Failed to send alert email:", error);
-  }
-}
-
 // ── Alert Evaluation Engine ──────────────────────────────
 // Fire-and-forget: runs after ingest, doesn't block response
 function ctx_evaluateAlerts(env: Env, agentId: number, events: IngestPayload["events"]) {
@@ -266,7 +216,7 @@ async function evaluateAlerts(env: Env, agentId: number, events: IngestPayload["
       "INSERT INTO events (agent_id, kind, ts, data) VALUES (?, 'alert_fired', ?, ?)"
     ).bind(agentId, Date.now() / 1000, JSON.stringify(alertData)).run();
 
-    // Deliver alerts based on channel
+    // Deliver webhook
     if (rule.channel === "webhook" && rule.webhook_url) {
       fetch(rule.webhook_url as string, {
         method: "POST",
@@ -280,23 +230,6 @@ async function evaluateAlerts(env: Env, agentId: number, events: IngestPayload["
           fired_at: new Date().toISOString(),
         }),
       }).catch(() => {});
-    } else if (rule.channel === "email") {
-      // Get agent info for email delivery
-      const agent = await env.DB.prepare(
-        "SELECT name, email FROM agents WHERE id = ?"
-      ).bind(agentId).first<{ name: string; email: string | null }>();
-      
-      if (agent?.email) {
-        sendAlertEmail(
-          env,
-          agent.email,
-          rule.rule_name as string,
-          cond.metric,
-          currentValue,
-          cond.threshold,
-          agent.name
-        ).catch(() => {}); // Fire-and-forget, don't block
-      }
     }
   }
 }

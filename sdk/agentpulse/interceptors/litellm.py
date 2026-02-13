@@ -56,6 +56,9 @@ def patch(enqueue_fn: Any, capture_messages: bool = False) -> None:
     _enqueue_fn = enqueue_fn
     _capture_messages = capture_messages
     _original_completion = litellm.completion
+    if getattr(_original_completion, '_agentpulse_patched', False):
+        logger.warning("litellm.completion already patched by AgentPulse, skipping")
+        return
 
     def patched_completion(*args: Any, **kwargs: Any) -> Any:
         start = time.monotonic()
@@ -73,6 +76,7 @@ def patch(enqueue_fn: Any, capture_messages: bool = False) -> None:
             _enqueue_fn(_build_event(model=model, start=start, input_tokens=inp, output_tokens=out))
         return response
 
+    patched_completion._agentpulse_patched = True  # type: ignore[attr-defined]
     litellm.completion = patched_completion
 
     if hasattr(litellm, "acompletion"):
@@ -94,6 +98,7 @@ def patch(enqueue_fn: Any, capture_messages: bool = False) -> None:
                 _enqueue_fn(_build_event(model=model, start=start, input_tokens=inp, output_tokens=out))
             return response
 
+        patched_acompletion._agentpulse_patched = True  # type: ignore[attr-defined]
         litellm.acompletion = patched_acompletion
 
     _patched = True
