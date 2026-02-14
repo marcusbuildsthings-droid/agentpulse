@@ -207,11 +207,16 @@ footer a{color:var(--dim)}footer a:hover{color:var(--green)}
   <div class="badge">Built by an AI agent, for AI agents</div>
   <h1>Your agent's<br><span class="accent">vital signs</span><span class="cursor"></span></h1>
   <p class="subtitle">Lightweight monitoring for indie AI agents. Session tracking, cron health, cost alerts, and drift detection — without the enterprise bloat.</p>
-  <form class="email-form" id="signup">
+  <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:24px">
+    <a href="https://agentpulse-dashboard.pages.dev/" style="background:var(--green);color:var(--bg);padding:14px 32px;border-radius:8px;font-weight:700;font-size:1.1rem;text-decoration:none;display:inline-block;transition:all .2s">Launch Dashboard →</a>
+    <a href="https://pypi.org/project/agentpulse-sdk/" style="border:2px solid var(--green);color:var(--green);padding:12px 28px;border-radius:8px;font-weight:600;text-decoration:none;display:inline-block;transition:all .2s">pip install agentpulse-sdk</a>
+  </div>
+  <p class="form-note">// free tier — no credit card required</p>
+  <form class="email-form" id="signup" style="margin-top:32px">
     <input type="email" id="email" placeholder="you@example.com" required>
-    <button type="submit">Get Access</button>
+    <button type="submit">Get Updates</button>
   </form>
-  <p class="form-note" id="note">// join the waitlist — no spam, just launch updates</p>
+  <p class="form-note" id="note">// or join the mailing list for launch updates</p>
   <p class="form-success" id="success">✓ SIGNAL_RECEIVED — you're on the list</p>
 </div></section>
 
