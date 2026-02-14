@@ -846,9 +846,9 @@
 
       <div class="step-label">▸ Step 2 — Integrate</div>
       <div class="code-block">
-        <span class="kw">from</span> agentpulse <span class="kw">import</span> pulse<br><br>
-        pulse.<span class="fn">init</span>(<span class="str">"ap_your_key"</span>)<br>
-        pulse.<span class="fn">heartbeat</span>()  <span class="cm"># that's it</span>
+        <span class="kw">import</span> agentpulse<br><br>
+        agentpulse.<span class="fn">init</span>(api_key=<span class="str">"ap_your_key"</span>)<br>
+        <span class="cm"># All LLM calls are now tracked automatically</span>
       </div>
 
       <div class="step-label">▸ Step 3 — Connect</div>
@@ -1974,11 +1974,11 @@
     function generateDemoModelCosts() {
       const mul = state.period === '30d' ? 8 : state.period === '7d' ? 3 : 1;
       return [
-        { model: 'claude-opus-4', cost: 2.45*mul, tokens: 180000*mul },
-        { model: 'claude-sonnet-4', cost: 0.89*mul, tokens: 320000*mul },
-        { model: 'gpt-4o', cost: 0.52*mul, tokens: 95000*mul },
-        { model: 'claude-haiku', cost: 0.18*mul, tokens: 420000*mul },
-        { model: 'gemini-2.5-pro', cost: 0.08*mul, tokens: 45000*mul },
+        { model: 'claude-opus-4-6', cost: 3.12*mul, tokens: 195000*mul },
+        { model: 'claude-sonnet-4', cost: 1.05*mul, tokens: 380000*mul },
+        { model: 'gemini-2.5-flash', cost: 0.42*mul, tokens: 520000*mul },
+        { model: 'gpt-4.1', cost: 0.38*mul, tokens: 85000*mul },
+        { model: 'claude-haiku-3.5', cost: 0.12*mul, tokens: 310000*mul },
       ];
     }
 
@@ -1999,25 +1999,25 @@
     function generateDemoTopSessions() {
       const now = Date.now()/1000;
       return [
-        { key: 'agent:main:main', model: 'claude-opus-4', tokens: 85000, cost: 1.28, duration: 3600 },
-        { key: 'agent:main:subagent:a1b2c3d4', model: 'claude-opus-4', tokens: 42000, cost: 0.63, duration: 1800 },
-        { key: 'agent:main:cron:builder-agent', model: 'claude-sonnet-4', tokens: 38000, cost: 0.38, duration: 900 },
-        { key: 'agent:main:imessage:direct:+14107461637', model: 'claude-sonnet-4', tokens: 25000, cost: 0.25, duration: 2400 },
-        { key: 'agent:main:cron:research-agent', model: 'gpt-4o', tokens: 18000, cost: 0.18, duration: 600 },
+        { key: 'agent:main:main', model: 'claude-opus-4-6', tokens: 85000, cost: 1.28, duration: 3600 },
+        { key: 'agent:main:subagent:deploy-fix', model: 'claude-sonnet-4', tokens: 42000, cost: 0.63, duration: 1800, label: 'deploy-fix' },
+        { key: 'agent:main:cron:builder-agent', model: 'claude-sonnet-4', tokens: 38000, cost: 0.38, duration: 900, job_name: 'builder-agent' },
+        { key: 'agent:main:imessage:direct:user', model: 'gemini-2.5-flash', tokens: 25000, cost: 0.25, duration: 2400 },
+        { key: 'agent:main:cron:research-agent', model: 'gemini-2.5-flash', tokens: 18000, cost: 0.18, duration: 600, job_name: 'research-agent' },
       ];
     }
 
     function generateDemoSessions() {
       const now = Date.now()/1000;
       return [
-        { key: 'agent:main:main', tokens: 85000, model: 'claude-opus-4', channel: 'imessage', lastActivity: now - 120, messageCount: 34, cost: 1.28, duration: 3600, _spark: generateSparkData(12) },
+        { key: 'agent:main:main', tokens: 85000, model: 'claude-opus-4-6', channel: 'imessage', lastActivity: now - 120, messageCount: 34, cost: 1.28, duration: 3600, _spark: generateSparkData(12) },
         { key: 'agent:main:cron:builder-agent', tokens: 38000, model: 'claude-sonnet-4', channel: 'cron', lastActivity: now - 900, messageCount: 8, cost: 0.38, duration: 900, _spark: generateSparkData(12, 0.5), job_name: 'builder-agent' },
-        { key: 'agent:main:subagent:a1b2c3d4-e5f6-7890-abcd-ef1234567890', tokens: 42000, model: 'claude-opus-4', channel: 'subagent', lastActivity: now - 300, messageCount: 12, cost: 0.63, duration: 1800, _spark: generateSparkData(12), label: 'agentpulse-sessions' },
-        { key: 'agent:main:cron:memory-consolidation', tokens: 5000, model: 'claude-haiku', channel: 'cron', lastActivity: now - 1800, messageCount: 2, cost: 0.02, duration: 120, _spark: generateSparkData(12, 0.3), job_name: 'memory-consolidation' },
-        { key: 'agent:main:imessage:direct:+14107461637', tokens: 25000, model: 'claude-sonnet-4', channel: 'imessage', lastActivity: now - 600, messageCount: 18, cost: 0.25, duration: 2400, _spark: generateSparkData(12) },
-        { key: 'agent:main:cron:session-cleanup', tokens: 3000, model: 'claude-haiku', channel: 'cron', lastActivity: now - 3600, messageCount: 1, cost: 0.01, duration: 60, _spark: generateSparkData(12, 0.2), job_name: 'session-cleanup' },
-        { key: 'agent:main:cron:horror-content', tokens: 15000, model: 'claude-sonnet-4', channel: 'cron', lastActivity: now - 7200, messageCount: 6, cost: 0.15, duration: 480, _spark: generateSparkData(12, 0.6), job_name: 'horror-content' },
-        { key: 'agent:main:cron:research-agent', tokens: 18000, model: 'gpt-4o', channel: 'cron', lastActivity: now - 5400, messageCount: 4, cost: 0.18, duration: 600, _spark: generateSparkData(12, 0.4), job_name: 'research-agent' },
+        { key: 'agent:main:subagent:a1b2c3d4-e5f6-7890-abcd-ef1234567890', tokens: 42000, model: 'claude-sonnet-4', channel: 'subagent', lastActivity: now - 300, messageCount: 12, cost: 0.63, duration: 1800, _spark: generateSparkData(12), label: 'deploy-fix' },
+        { key: 'agent:main:cron:memory-consolidation', tokens: 5000, model: 'claude-haiku-3.5', channel: 'cron', lastActivity: now - 1800, messageCount: 2, cost: 0.02, duration: 120, _spark: generateSparkData(12, 0.3), job_name: 'memory-consolidation' },
+        { key: 'agent:main:discord:server:ai-builders', tokens: 25000, model: 'gemini-2.5-flash', channel: 'discord', lastActivity: now - 600, messageCount: 18, cost: 0.25, duration: 2400, _spark: generateSparkData(12) },
+        { key: 'agent:main:cron:session-cleanup', tokens: 3000, model: 'claude-haiku-3.5', channel: 'cron', lastActivity: now - 3600, messageCount: 1, cost: 0.01, duration: 60, _spark: generateSparkData(12, 0.2), job_name: 'session-cleanup' },
+        { key: 'agent:main:cron:daily-report', tokens: 15000, model: 'claude-sonnet-4', channel: 'cron', lastActivity: now - 7200, messageCount: 6, cost: 0.15, duration: 480, _spark: generateSparkData(12, 0.6), job_name: 'daily-report' },
+        { key: 'agent:main:cron:research-agent', tokens: 18000, model: 'gemini-2.5-flash', channel: 'cron', lastActivity: now - 5400, messageCount: 4, cost: 0.18, duration: 600, _spark: generateSparkData(12, 0.4), job_name: 'research-agent' },
       ];
     }
 
@@ -2071,7 +2071,7 @@
             kind: ['cost','session_start','heartbeat','cron','memory','alert'][i%6],
             ts: now - i*300,
             session_key: `agent:main:${i%3===0?'main':i%3===1?'cron:builder-agent':'subagent:'+i}`,
-            data: { model: ['claude-opus-4','claude-sonnet-4','gpt-4o','claude-haiku'][i%4], tokens: 5000+i*200, cost_usd: 0.10+i*0.02 },
+            data: { model: ['claude-opus-4-6','claude-sonnet-4','gpt-4.1','claude-haiku-3.5'][i%4], tokens: 5000+i*200, cost_usd: 0.10+i*0.02 },
           }));
         }
         
@@ -2101,19 +2101,19 @@
         // Main session: conversation flow
         events.push(
           { kind: 'session_start', ts: baseTs - 1200, session_key: sessionKey, data: { type: 'main', channel: 'imessage' } },
-          { kind: 'cost', ts: baseTs - 1100, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 2500, cost_usd: 0.075 } },
+          { kind: 'cost', ts: baseTs - 1100, session_key: sessionKey, data: { model: 'claude-opus-4-6', tokens: 2500, cost_usd: 0.075 } },
           { kind: 'memory', ts: baseTs - 900, session_key: sessionKey, data: { action: 'updated', file: 'SESSION.md' } },
-          { kind: 'cost', ts: baseTs - 800, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 4200, cost_usd: 0.126 } },
-          { kind: 'cost', ts: baseTs - 600, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 1800, cost_usd: 0.054 } },
+          { kind: 'cost', ts: baseTs - 800, session_key: sessionKey, data: { model: 'claude-opus-4-6', tokens: 4200, cost_usd: 0.126 } },
+          { kind: 'cost', ts: baseTs - 600, session_key: sessionKey, data: { model: 'claude-opus-4-6', tokens: 1800, cost_usd: 0.054 } },
           { kind: 'heartbeat', ts: baseTs - 300, session_key: sessionKey, data: { status: 'active' } }
         );
       } else if (isSubagent) {
         // Subagent: focused task execution
         events.push(
           { kind: 'session_start', ts: baseTs - 600, session_key: sessionKey, data: { type: 'subagent', task: 'Fix cron session names' } },
-          { kind: 'cost', ts: baseTs - 550, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 1500, cost_usd: 0.045 } },
+          { kind: 'cost', ts: baseTs - 550, session_key: sessionKey, data: { model: 'claude-opus-4-6', tokens: 1500, cost_usd: 0.045 } },
           { kind: 'memory', ts: baseTs - 400, session_key: sessionKey, data: { action: 'read', file: 'api/src/index.ts' } },
-          { kind: 'cost', ts: baseTs - 300, session_key: sessionKey, data: { model: 'claude-opus-4', tokens: 2800, cost_usd: 0.084 } },
+          { kind: 'cost', ts: baseTs - 300, session_key: sessionKey, data: { model: 'claude-opus-4-6', tokens: 2800, cost_usd: 0.084 } },
           { kind: 'session_end', ts: baseTs - 120, session_key: sessionKey, data: { status: 'completed', summary: 'Task finished successfully' } }
         );
       }
