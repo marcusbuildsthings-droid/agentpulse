@@ -353,8 +353,8 @@ export default {
 
       try {
         await env.DB.prepare(
-          "INSERT INTO agents (name, api_key_hash, email, plan) VALUES (?, ?, ?, 'free')"
-        ).bind(body.name, keyHash, body.email || null).run();
+          "INSERT INTO agents (name, api_key, api_key_hash, email, plan) VALUES (?, ?, ?, ?, 'free')"
+        ).bind(body.name, "hashed", keyHash, body.email || null).run();
         return json({ name: body.name, api_key: raw, plan: "free" }, 201, req, env);
       } catch (e: any) {
         if (e.message?.includes("UNIQUE")) {
@@ -457,6 +457,14 @@ export default {
 
       await env.DB.batch(batch);
 
+      // Update heartbeat timestamp if any heartbeat events
+      const hasHeartbeat = body.events.some((e) => e.kind === "heartbeat");
+      if (hasHeartbeat) {
+        await env.DB.prepare(
+          "INSERT INTO heartbeats (agent_id, ts) VALUES (?, ?) ON CONFLICT(agent_id) DO UPDATE SET ts = excluded.ts"
+        ).bind(agent.id, Math.floor(Date.now() / 1000)).run();
+      }
+
       // Update cost aggregates if any cost events
       const costEvents = body.events.filter((e) => e.kind === "cost");
       if (costEvents.length > 0) {
@@ -469,6 +477,20 @@ export default {
         await env.DB.prepare(
           "INSERT INTO cost_daily (agent_id, date, total_cost, total_tokens, event_count) VALUES (?, date('now'), ?, ?, ?) ON CONFLICT(agent_id, date) DO UPDATE SET total_cost = total_cost + excluded.total_cost, total_tokens = total_tokens + excluded.total_tokens, event_count = event_count + excluded.event_count"
         ).bind(agent.id, totalCost, totalTokens, costEvents.length).run();
+      }
+
+      // ── Store transcript data ──────────────────────────────
+      const transcriptEvents = body.events.filter((e) => e.kind === "transcript");
+      if (transcriptEvents.length > 0) {
+        for (const te of transcriptEvents) {
+          const sk = te.session || (te.data as any)?.session_key;
+          const msgs = (te.data as any)?.messages;
+          if (sk && Array.isArray(msgs)) {
+            await env.DB.prepare(
+              "INSERT INTO transcripts (agent_id, session_key, messages, updated_at) VALUES (?, ?, ?, datetime('now')) ON CONFLICT(agent_id, session_key) DO UPDATE SET messages = excluded.messages, updated_at = datetime('now')"
+            ).bind(agent.id, sk, JSON.stringify(msgs)).run();
+          }
+        }
       }
 
       // ── Evaluate alert rules after ingest ──────────────────
@@ -611,7 +633,8 @@ export default {
         "SELECT ts FROM heartbeats WHERE agent_id = ?"
       ).bind(agent.id).first<{ ts: string }>();
       const lastSeen = heartbeatRow?.ts || null;
-      const alive = lastSeen ? (Date.now() - new Date(lastSeen).getTime()) < 1200000 : false; // 20 minutes
+      const lastSeenMs = lastSeen ? (typeof lastSeen === 'number' || /^\d+(\.\d+)?$/.test(String(lastSeen)) ? Number(lastSeen) * 1000 : new Date(lastSeen).getTime()) : 0;
+      const alive = lastSeenMs > 0 ? (Date.now() - lastSeenMs) < 1200000 : false; // 20 minutes
 
       const [eventCounts, costData, cronHealth, topSessions, modelCosts, dailySpend, cronDetail] = await Promise.all([
         env.DB.prepare(
@@ -623,13 +646,34 @@ export default {
         ).bind(agent.id, dateSince).first(),
 
         env.DB.prepare(
-          "SELECT json_extract(data, '$.job') as job, json_extract(data, '$.status') as status, COUNT(*) as count FROM events WHERE agent_id = ? AND kind = 'cron' AND ts >= ? GROUP BY job, status"
+          "SELECT json_extract(data, '$.job') as job, CASE WHEN json_extract(data, '$.status') = 'ok' THEN 'ok' ELSE 'fail' END as status, COUNT(*) as count FROM events WHERE agent_id = ? AND kind = 'cron' AND json_extract(data, '$.status') IS NOT NULL AND ts >= ? GROUP BY job, status"
         ).bind(agent.id, sinceTs).all(),
 
-        // Top sessions by cost
+        // Top sessions by cost — aggregated by resolved name to dedup cron runs
         env.DB.prepare(
-          "SELECT session_key as key, SUM(json_extract(data, '$.cost_usd')) as cost, SUM(COALESCE(json_extract(data, '$.tokens'),0)) as tokens, MAX(json_extract(data, '$.model')) as model, MAX(ts) - MIN(ts) as duration FROM events WHERE agent_id = ? AND kind = 'cost' AND session_key IS NOT NULL AND ts >= ? GROUP BY session_key ORDER BY cost DESC LIMIT 20"
-        ).bind(agent.id, sinceTs).all(),
+          `SELECT
+            COALESCE(s.job_name, s.label, e.session_key) as resolved_name,
+            MIN(e.session_key) as key,
+            SUM(json_extract(e.data, '$.cost_usd')) as cost,
+            SUM(COALESCE(json_extract(e.data, '$.tokens'),0)) as tokens,
+            MAX(json_extract(e.data, '$.model')) as model,
+            MAX(e.ts) - MIN(e.ts) as duration,
+            MAX(s.job_name) as job_name,
+            MAX(s.label) as label
+          FROM events e
+          LEFT JOIN (
+            SELECT session_key,
+              json_extract(data, '$.job_name') as job_name,
+              json_extract(data, '$.label') as label
+            FROM events
+            WHERE agent_id = ? AND kind = 'session' AND session_key IS NOT NULL
+              AND (json_extract(data, '$.job_name') IS NOT NULL OR json_extract(data, '$.label') IS NOT NULL)
+            GROUP BY session_key
+          ) s ON e.session_key = s.session_key
+          WHERE e.agent_id = ? AND e.kind = 'cost' AND e.session_key IS NOT NULL AND e.ts >= ?
+          GROUP BY COALESCE(s.job_name, s.label, e.session_key)
+          ORDER BY cost DESC LIMIT 20`
+        ).bind(agent.id, agent.id, sinceTs).all(),
 
         // Model costs
         env.DB.prepare(
@@ -641,9 +685,9 @@ export default {
           "SELECT date, total_cost as cost FROM cost_daily WHERE agent_id = ? AND date >= date('now', ?) ORDER BY date ASC"
         ).bind(agent.id, dateSince).all(),
 
-        // Cron detail: last run per job
+        // Cron detail: last run per job (use started_at if available, else ts)
         env.DB.prepare(
-          "SELECT json_extract(data, '$.job') as job, ts as last_run_ts, json_extract(data, '$.status') as last_status, json_extract(data, '$.duration_ms') as last_duration_ms, json_extract(data, '$.error') as last_error, json_extract(data, '$.summary') as last_summary FROM events WHERE agent_id = ? AND kind = 'cron' AND id IN (SELECT MAX(id) FROM events WHERE agent_id = ? AND kind = 'cron' GROUP BY json_extract(data, '$.job'))"
+          "SELECT json_extract(data, '$.job') as job, COALESCE(json_extract(data, '$.started_at'), ts) as last_run_ts, json_extract(data, '$.status') as last_status, json_extract(data, '$.duration_ms') as last_duration_ms, json_extract(data, '$.error') as last_error, json_extract(data, '$.summary') as last_summary FROM events WHERE agent_id = ? AND kind = 'cron' AND json_extract(data, '$.status') IS NOT NULL AND id IN (SELECT MAX(id) FROM events WHERE agent_id = ? AND kind = 'cron' AND json_extract(data, '$.status') IS NOT NULL GROUP BY json_extract(data, '$.job'))"
         ).bind(agent.id, agent.id).all(),
       ]);
 
@@ -663,11 +707,11 @@ export default {
 
       return json({
         period,
-        gateway_status: { last_seen: lastSeen, alive },
+        gateway_status: { last_seen: lastSeenMs > 0 ? new Date(lastSeenMs).toISOString() : null, alive },
         events: Object.fromEntries(eventCounts.results.map((r: any) => [r.kind, r.count])),
         cost: { usd: (costData as any)?.cost || 0, tokens: (costData as any)?.tokens || 0 },
         cron_health: enrichedCronHealth,
-        top_sessions: (topSessions.results as any[]).map((r: any) => ({ key: r.key, cost: r.cost || 0, tokens: r.tokens || 0, model: r.model || '', duration: r.duration || 0 })),
+        top_sessions: (topSessions.results as any[]).map((r: any) => ({ key: r.key, cost: r.cost || 0, tokens: r.tokens || 0, model: r.model || '', duration: r.duration || 0, job_name: r.job_name || null, label: r.label || null })),
         model_costs: (modelCosts.results as any[]).map((r: any) => ({ model: r.model || 'unknown', cost: r.cost || 0, tokens: r.tokens || 0 })),
         daily_spend: (dailySpend.results as any[]).map((r: any) => ({ date: r.date, cost: r.cost || 0 })),
       }, 200, req, env);
@@ -758,6 +802,17 @@ export default {
         "ORDER BY ts DESC LIMIT 50"
       ).bind(agent.id).all();
       return json({ crons: rows.results }, 200, req, env);
+    }
+
+    // ── GET /v1/sessions/:key/transcript ────────────────
+    const transcriptMatch = path.match(/^\/v1\/sessions\/(.+)\/transcript$/);
+    if (transcriptMatch && req.method === "GET") {
+      const sessionKey = decodeURIComponent(transcriptMatch[1]);
+      const row = await env.DB.prepare(
+        "SELECT messages, updated_at FROM transcripts WHERE agent_id = ? AND session_key = ?"
+      ).bind(agent.id, sessionKey).first<{ messages: string; updated_at: string }>();
+      if (!row) return json({ messages: [], session_key: sessionKey }, 200, req, env);
+      return json({ messages: JSON.parse(row.messages), session_key: sessionKey, updated_at: row.updated_at }, 200, req, env);
     }
 
     // ── DELETE /v1/cleanup (clean up null cron jobs) ────

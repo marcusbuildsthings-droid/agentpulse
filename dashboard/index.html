@@ -706,7 +706,7 @@
     .chat-msg {
       display: flex;
       gap: 10px;
-      padding: 12px 20px;
+      padding: 8px 20px;
     }
     .chat-msg.user { flex-direction: row-reverse; }
     .chat-msg .avatar {
@@ -717,16 +717,22 @@
       font-size: 12px;
       flex-shrink: 0;
     }
-    .chat-msg.user .avatar { background: var(--blue-muted); }
-    .chat-msg.assistant .avatar { background: var(--accent-muted); }
+    .chat-msg.user .avatar { background: var(--blue-muted); color: var(--blue); }
+    .chat-msg.assistant .avatar { background: var(--accent-muted); color: var(--accent); }
+    .chat-msg.tool_call .avatar { background: var(--yellow-muted); color: var(--yellow); }
+    .chat-msg.tool_result .avatar { background: var(--bg-4); color: var(--text-3); }
     .chat-msg .bubble {
-      max-width: 65%;
+      max-width: 70%;
       padding: 10px 14px;
       font-size: 13px;
       line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
-    .chat-msg.user .bubble { background: var(--blue-muted); }
-    .chat-msg.assistant .bubble { background: var(--bg-3); }
+    .chat-msg.user .bubble { background: var(--blue-muted); color: var(--text-0); }
+    .chat-msg.assistant .bubble { background: var(--bg-3); color: var(--text-1); }
+    .chat-msg.tool_call .bubble { background: var(--yellow-muted); font-family: var(--mono); font-size: 12px; color: var(--yellow); }
+    .chat-msg.tool_result .bubble { background: var(--bg-1); font-family: var(--mono); font-size: 11px; color: var(--text-3); max-height: 120px; overflow-y: auto; }
     .chat-msg .bubble .msg-meta {
       font-size: 10px;
       color: var(--text-3);
@@ -735,6 +741,43 @@
       gap: 8px;
       font-family: var(--mono);
     }
+    .transcript-container {
+      max-height: 500px;
+      overflow-y: auto;
+      background: var(--bg-0);
+      border: 1px solid var(--border-subtle);
+      margin: 0 16px 16px;
+    }
+    .transcript-header {
+      padding: 8px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-2);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      background: var(--bg-1);
+      z-index: 1;
+    }
+    .transcript-empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-3);
+      font-size: 12px;
+    }
+    /* Active session indicator */
+    .session-active-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .session-active-dot.active { background: var(--green); box-shadow: 0 0 6px var(--green-glow); animation: pulse 2s ease-in-out infinite; }
+    .session-active-dot.ended { background: var(--text-3); }
 
     /* ─── Bar Chart ────────────────────────────────────── */
     .bar-row {
@@ -818,6 +861,17 @@
         <input id="ob-key" type="text" placeholder="ap_..." style="background:var(--bg-2);border:1px solid var(--border);padding:10px 14px;color:var(--green);width:100%;font-size:13px;font-family:var(--mono);outline:none">
       </div>
       <button class="btn btn-primary" onclick="saveOnboard()" style="width:100%;justify-content:center;margin-bottom:0">Connect →</button>
+      <div class="or-divider">— or create a free account —</div>
+      <div style="margin-bottom:8px">
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Agent Name</label>
+        <input id="ob-reg-name" type="text" placeholder="my-agent" style="background:var(--bg-2);border:1px solid var(--border);padding:10px 14px;color:var(--green);width:100%;font-size:13px;font-family:var(--mono);outline:none">
+      </div>
+      <div style="margin-bottom:8px">
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Email <span style="color:var(--text-3);font-weight:400">(optional)</span></label>
+        <input id="ob-reg-email" type="email" placeholder="you@example.com" style="background:var(--bg-2);border:1px solid var(--border);padding:10px 14px;color:var(--green);width:100%;font-size:13px;font-family:var(--mono);outline:none">
+      </div>
+      <button class="btn btn-primary" onclick="registerAccount()" style="width:100%;justify-content:center;margin-bottom:0;background:var(--purple);border-color:var(--purple)">Create Free Account →</button>
+      <div id="reg-result" style="margin-top:12px;display:none"></div>
       <div class="or-divider">— or —</div>
       <button class="btn btn-ghost" onclick="enableDemo()" style="width:100%;justify-content:center">Try Demo Mode</button>
     </div>
@@ -919,6 +973,13 @@
       return n.toString();
     }
     function formatUsd(n) { return '$' + n.toFixed(2); }
+    function formatDuration(seconds) {
+      if (!seconds || seconds <= 0) return '—';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    }
 
     function relativeTime(ts) {
       const diff = Date.now()/1000 - ts;
@@ -947,6 +1008,14 @@
 
     function setHeader(title, actions = '') {
       document.getElementById('main-header').innerHTML = `<h2>${title}</h2><div style="display:flex;align-items:center;gap:12px">${gatewayPill()}${actions}</div>`;
+    }
+
+    function cronStatusBadge(j) {
+      const total = (j.ok || 0) + (j.fail || 0);
+      if (total === 0) return { cls: 'info', text: 'Unknown' };
+      if (j.ok === 0) return { cls: 'fail', text: 'Failed' };
+      if (j.fail === 0) return { cls: 'ok', text: 'Healthy' };
+      return { cls: 'warn', text: 'Degraded' };
     }
 
     function getSessionType(key) {
@@ -984,17 +1053,9 @@
         return 'Sub-agent';
       }
       
-      // Mask phone numbers for PII protection
-      s = s.replace(/(\+1[0-9]{10})/g, (match) => {
-        const lastFour = match.slice(-4);
-        return `•••${lastFour}`;
-      });
-      
-      // Also handle other phone formats
-      s = s.replace(/([0-9]{10,})/g, (match) => {
-        const lastFour = match.slice(-4);
-        return `•••${lastFour}`;
-      });
+      // Mask phone numbers for PII protection (but not UUIDs)
+      s = s.replace(/(\+1\d{10})/g, (match) => `•••${match.slice(-4)}`);
+      s = s.replace(/(\b\d{3}-\d{3}-\d{4}\b)/g, (match) => `•••${match.slice(-4)}`);
       
       // Shorten UUIDs
       s = s.replace(/([a-f0-9]{8})-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '$1…');
@@ -1222,8 +1283,40 @@
           messageCount: s.events || 0,
           cost: s.cost || 0,
           duration: (s.last_active || 0) - (s.started || 0),
+          job_name: s.job_name || null,
+          label: s.label || null,
         }));
       }
+
+      // Filter phantom "session:" entries (transcript events creating fake sessions with no cost)
+      sessions = sessions.filter(s => {
+        if (s.key && s.key.startsWith('session:') && (!s.cost || s.cost === 0)) return false;
+        return true;
+      });
+
+      // Deduplicate cron sessions by job name — group runs together
+      const cronGroups = {};
+      const nonCronSessions = [];
+      sessions.forEach(s => {
+        const jn = s.job_name || (s.key && s.key.includes(':cron:') ? s.key.replace(/^agent:main:cron:/, '').split(':')[0] : null);
+        if (jn) {
+          if (!cronGroups[jn]) {
+            cronGroups[jn] = { ...s, job_name: jn, _runCount: 1, _origCost: s.cost || 0, _origTokens: s.tokens || 0 };
+          } else {
+            const g = cronGroups[jn];
+            g._runCount++;
+            g.cost = (g.cost || 0) + (s.cost || 0);
+            g.tokens = (g.tokens || 0) + (s.tokens || 0);
+            g.messageCount = (g.messageCount || 0) + (s.messageCount || s.events || 0);
+            if ((s.lastActivity || 0) > (g.lastActivity || 0)) {
+              g.lastActivity = s.lastActivity;
+            }
+          }
+        } else {
+          nonCronSessions.push(s);
+        }
+      });
+      sessions = [...nonCronSessions, ...Object.values(cronGroups)];
 
       sessions.sort((a, b) => b.lastActivity - a.lastActivity);
       if (!sessions.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">⊞</div><h3>No sessions</h3><p>Sessions appear when your agent reports events.</p></div>'; return; }
@@ -1244,9 +1337,11 @@
       sessions.forEach((s, idx) => {
         const t = getSessionType(s.key);
         const spark = s._spark || generateSparkData(12, 0.8);
+        const age = Date.now()/1000 - (s.lastActivity || s.last_active || 0);
+        const isActive = age < 600; // Active if seen in last 10 min
         html += `<div class="session-item" onclick="toggleDetail(${idx}, '${esc(s.key).replace(/'/g, "\\'")}')">
-          <div class="s-icon ${t.type}">${t.icon}</div>
-          <div class="s-name">${esc(shortenSessionKey(s.key, s))}</div>
+          <div class="s-icon ${t.type}"><span class="session-active-dot ${isActive ? 'active' : 'ended'}"></span></div>
+          <div class="s-name">${esc(shortenSessionKey(s.key, s))}${s._runCount > 1 ? ' <span style="color:var(--text-3);font-size:10px">×' + s._runCount + ' runs</span>' : ''}</div>
           <div class="s-spark">${sparklineSVG(spark, 120, 24, 'var(--green)', false)}</div>
           <div class="s-val">${s.messageCount || s.events || '—'}</div>
           <div class="s-val">${s.cost ? formatUsd(s.cost) : '—'}</div>
@@ -1257,11 +1352,20 @@
           <div class="session-detail-grid">
             <div class="session-detail-stat"><div class="label">Events</div><div class="val">${s.events || s.messageCount || 0}</div></div>
             <div class="session-detail-stat"><div class="label">Cost</div><div class="val">${s.cost ? formatUsd(s.cost) : '$0.00'}</div></div>
-            <div class="session-detail-stat"><div class="label">Duration</div><div class="val">${s.duration ? Math.round(s.duration / 60) + 'm' : '—'}</div></div>
+            <div class="session-detail-stat"><div class="label">Duration</div><div class="val">${formatDuration(s.duration)}</div></div>
             <div class="session-detail-stat"><div class="label">Model</div><div class="val" style="font-size:12px">${esc(s.model || '—')}</div></div>
           </div>
           <div style="padding:12px 16px;font-size:11px;color:var(--text-3);font-family:var(--mono)">
             ${formatNum(s.tokens || 0)} tokens · ${esc(s.channel || 'unknown')} · ${esc(s.key)}
+          </div>
+          <div id="transcript-${idx}" class="transcript-container" style="display:none">
+            <div class="transcript-header">
+              <span>💬 Transcript</span>
+              <span id="transcript-count-${idx}" style="font-weight:400;color:var(--text-3)"></span>
+            </div>
+            <div id="transcript-msgs-${idx}">
+              <div class="transcript-empty">Loading transcript...</div>
+            </div>
           </div>
           <div id="timeline-${idx}" class="session-timeline" style="padding:0 16px 16px">
             <div style="font-size:11px;color:var(--text-3);margin-bottom:8px">Loading timeline...</div>
@@ -1276,16 +1380,97 @@
       const det = document.getElementById('det-' + idx);
       const exp = document.getElementById('exp-' + idx);
       const timeline = document.getElementById('timeline-' + idx);
+      const transcriptEl = document.getElementById('transcript-' + idx);
       if (!det) return;
       const show = det.style.display !== 'block';
       det.style.display = show ? 'block' : 'none';
       if (exp) exp.style.transform = show ? 'rotate(90deg)' : '';
       
-      // Load session timeline when expanding
-      if (show && timeline && sessionKey) {
-        await loadSessionTimeline(sessionKey, timeline);
+      // Load transcript and timeline when expanding
+      if (show && sessionKey) {
+        if (transcriptEl) await loadTranscript(sessionKey, idx);
+        if (timeline) await loadSessionTimeline(sessionKey, timeline);
       }
     };
+
+    async function loadTranscript(sessionKey, idx) {
+      const container = document.getElementById('transcript-msgs-' + idx);
+      const wrapper = document.getElementById('transcript-' + idx);
+      const countEl = document.getElementById('transcript-count-' + idx);
+      if (!container || !wrapper) return;
+
+      try {
+        let messages = [];
+        if (state.demoMode) {
+          messages = generateDemoTranscript(sessionKey);
+        } else {
+          const data = await api('/v1/sessions/' + encodeURIComponent(sessionKey) + '/transcript');
+          messages = data?.messages || [];
+        }
+
+        if (!messages.length) {
+          container.innerHTML = '<div class="transcript-empty">No transcript available yet. Run the reporter to collect transcripts.</div>';
+          wrapper.style.display = 'block';
+          return;
+        }
+
+        if (countEl) countEl.textContent = messages.length + ' messages';
+
+        let html = '';
+        messages.forEach(msg => {
+          const role = msg.role || 'unknown';
+          const content = esc(msg.content || '');
+          const ts = msg.ts ? new Date(msg.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+          
+          const avatarMap = { user: '👤', assistant: '🤖', tool_call: '🔧', tool_result: '📋' };
+          const avatar = avatarMap[role] || '○';
+          
+          html += `<div class="chat-msg ${role}">
+            <div class="avatar">${avatar}</div>
+            <div class="bubble">
+              ${content}
+              ${ts ? `<div class="msg-meta"><span>${ts}</span><span>${role}</span></div>` : ''}
+            </div>
+          </div>`;
+        });
+
+        container.innerHTML = html;
+        wrapper.style.display = 'block';
+        
+        // Scroll to bottom of transcript
+        container.scrollTop = container.scrollHeight;
+      } catch (e) {
+        container.innerHTML = '<div class="transcript-empty" style="color:var(--red)">Failed to load transcript</div>';
+        wrapper.style.display = 'block';
+      }
+    }
+
+    function generateDemoTranscript(sessionKey) {
+      const now = new Date().toISOString();
+      if (sessionKey.includes('main:main')) {
+        return [
+          { role: 'user', content: 'are you back? what happened your configs exploded and I had to fix you?', ts: now },
+          { role: 'assistant', content: 'Yeah, I\'m back. Looking at my logs, here\'s what likely happened — the config sync script overwrote my gateway config during a scheduled update.', ts: now },
+          { role: 'tool_call', content: 'exec, read', ts: now },
+          { role: 'tool_result', content: 'exec: Found config backup at ~/.openclaw/config.bak', ts: now },
+          { role: 'assistant', content: 'Found the issue. The auto-updater replaced my config with a template. I\'ve disabled that behavior now.', ts: now },
+          { role: 'user', content: 'yeah that needs to be fixed permanently', ts: now },
+          { role: 'assistant', content: 'Done. Added a guard in the update script that skips config files if they\'ve been modified. Also backed up the current working config.', ts: now },
+        ];
+      }
+      if (sessionKey.includes('cron:')) {
+        return [
+          { role: 'assistant', content: 'Starting scheduled job...', ts: now },
+          { role: 'tool_call', content: 'exec', ts: now },
+          { role: 'tool_result', content: 'exec: Job completed successfully in 12.3s', ts: now },
+          { role: 'assistant', content: 'Job finished. Processed 42 items, no errors.', ts: now },
+        ];
+      }
+      return [
+        { role: 'user', content: 'Hello, can you help me with something?', ts: now },
+        { role: 'assistant', content: 'Of course! What do you need help with?', ts: now },
+      ];
+    }
 
     async function loadSessionTimeline(sessionKey, container) {
       if (!sessionKey) return;
@@ -1398,12 +1583,9 @@
 
         <!-- Daily spend trend -->
         <div class="panel">
-          <div class="panel-header">Daily Spend Trend</div>
+          <div class="panel-header">Daily Spend</div>
           <div class="chart-container">
-            ${areaChartSVG(dailySpend.map(d => d.value), 700, 160, {
-              color: 'var(--green)',
-              labels: dailySpend.map(d => d.label),
-            })}
+            ${dailySpend.length ? barChartSVG(dailySpend.map(d => ({ label: d.label, value: d.value, display: formatUsd(d.value) })), 700, Math.max(120, dailySpend.length * 28), { colors: dailySpend.map(() => 'var(--green)') }) : '<div style="padding:20px;color:var(--text-3);text-align:center;font-size:12px">No data</div>'}
           </div>
         </div>
 
@@ -1442,11 +1624,11 @@
             <thead><tr><th>Session</th><th>Model</th><th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th><th style="text-align:right">Duration</th></tr></thead>
             <tbody>
               ${topSessions.map(s => `<tr>
-                <td><span style="font-family:var(--mono);font-size:12px">${esc(shortenSessionKey(s.key))}</span></td>
+                <td><span style="font-family:var(--mono);font-size:12px">${esc(shortenSessionKey(s.key, s))}</span></td>
                 <td style="font-family:var(--mono);font-size:12px;color:var(--text-2)">${esc(s.model)}</td>
                 <td style="text-align:right;font-family:var(--mono);font-size:12px">${formatNum(s.tokens)}</td>
                 <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--green)">${formatUsd(s.cost)}</td>
-                <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-3)">${Math.round(s.duration/60)}m</td>
+                <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-3)">${formatDuration(s.duration)}</td>
               </tr>`).join('')}
             </tbody>
           </table>
@@ -1485,7 +1667,7 @@
               <td style="text-align:right;font-variant-numeric:tabular-nums;color:${j.fail ? 'var(--red)' : 'var(--text-3)'}">${j.fail}</td>
               <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-3)">${j.last_run_ts ? relativeTime(j.last_run_ts) + ' ago' : '—'}</td>
               <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text-3)">${j.last_duration_ms != null ? (j.last_duration_ms/1000).toFixed(1) + 's' : '—'}</td>
-              <td style="text-align:right"><span class="badge ${j.fail > 0 ? 'fail' : 'ok'}">${j.fail > 0 ? 'Issues' : 'Healthy'}</span></td>
+              <td style="text-align:right"><span class="badge ${cronStatusBadge(j).cls}">${cronStatusBadge(j).text}</span></td>
             </tr>
             <tr id="cron-det-${idx}" style="display:none">
               <td colspan="6" style="background:var(--bg-1);padding:12px 20px">
@@ -1738,6 +1920,25 @@
       localStorage.setItem('ap_api_url', state.apiUrl);
       localStorage.setItem('ap_api_key', state.apiKey);
       setView('overview');
+    }
+
+    async function registerAccount() {
+      const name = document.getElementById('ob-reg-name').value.trim();
+      const email = document.getElementById('ob-reg-email').value.trim();
+      const result = document.getElementById('reg-result');
+      if (!name || name.length < 2) { result.style.display='block'; result.style.color='var(--red)'; result.textContent='Agent name required (min 2 chars)'; return; }
+      const url = document.getElementById('ob-url').value.replace(/\/$/, '');
+      result.style.display='block'; result.style.color='var(--text-2)'; result.textContent='Creating account...';
+      try {
+        const body = { name };
+        if (email) body.email = email;
+        const res = await fetch(url + '/v1/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (!res.ok) { result.style.color='var(--red)'; result.textContent=data.error||'Registration failed'; return; }
+        result.style.color='var(--green)';
+        result.innerHTML='✓ Account created! Your API key:<br><code style="background:var(--bg-1);padding:6px 10px;display:block;margin-top:8px;font-size:14px;word-break:break-all;border:1px solid var(--green);user-select:all">'+data.api_key+'</code><br><span style="color:var(--yellow);font-size:12px">⚠ Save this key — it won\'t be shown again!</span>';
+        document.getElementById('ob-key').value = data.api_key;
+      } catch(e) { result.style.color='var(--red)'; result.textContent='Network error: '+e.message; }
     }
 
     function saveOnboard() {
