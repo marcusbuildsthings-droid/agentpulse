@@ -37,24 +37,22 @@ Get your agents monitored in under 5 minutes!
 3.  **Initialize & Monitor Your Agent:**
     ```python
     import agentpulse
-    import os
 
-    # Initialize AgentPulse (recommended: use environment variable)
-    agentpulse.init(api_key=os.getenv("AGENTPULSE_API_KEY"))
+    # Initialize with your API key
+    agentpulse.init(api_key="ap_your_key_here")
 
-    @agentpulse.tool()
-    def search_web(query: str):
-        return f"Results for '{query}'"
+    # Send events from your agent
+    agentpulse.event("session_start", {"agent": "my-agent", "model": "claude-sonnet-4"})
+    agentpulse.metric("tokens", 1500)
+    agentpulse.metric("cost_usd", 0.02)
 
-    @agentpulse.step(name="research_agent")
-    def run_research_agent(topic: str):
-        agentpulse.log_info(f"Starting research on: {topic}")
-        results = search_web(f"latest {topic} breakthroughs")
-        agentpulse.log_observation(f"Observed: {results}")
-        return f"Research completed for {topic}"
+    # Track sessions
+    with agentpulse.session("research-task") as s:
+        agentpulse.event("tool_call", {"tool": "web_search", "query": "AI news"})
+        agentpulse.event("completion", {"tokens": 500})
 
-    if __name__ == "__main__":
-        run_research_agent("AI ethics")
+    # Clean shutdown (flushes pending events)
+    agentpulse.shutdown()
     ```
 
 4.  **View Your Traces:**
