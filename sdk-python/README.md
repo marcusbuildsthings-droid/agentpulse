@@ -8,38 +8,64 @@ Lightweight monitoring for indie AI agents. Zero dependencies. Fire-and-forget.
 pip install agentpulse
 ```
 
-## Quick Start
+## Quick Start (Manual)
 
 ```python
-from agentpulse import pulse, init
+from agentpulse import pulse
 
 # Initialize with your API key
-init(api_key="ap_...")
+pulse.init(api_key="ap_...")
 
 # Track sessions
 pulse.session_start("main")
-pulse.session_event("main", "tool_call", {"tool": "web_search"})
+pulse.session_message("main", "Hello", role="user")
 pulse.session_end("main")
 
 # Report cron jobs
 pulse.cron_report("email-check", status="ok", duration_ms=1200)
-pulse.cron_report("backup", status="error", summary="disk full")
 
 # Track costs
-pulse.cost_event(model="claude-opus-4", input_tokens=5000, output_tokens=1000, cost=0.15)
-
-# Monitor memory
-pulse.memory_report("MEMORY.md", size_bytes=45000, lines=800)
+pulse.cost_event(model="claude-opus-4", tokens_in=5000, tokens_out=1000, cost_usd=0.15)
 
 # Custom metrics
 pulse.metric("response_time_ms", 342)
 
-# Alerts
-pulse.alert("Cost spike detected", severity="warning", details="$5.20 in last hour")
-
 # Heartbeat
 pulse.heartbeat()
 ```
+
+## Auto-Patching (Anthropic SDK)
+
+**NEW in v0.2**: Automatically monitor existing Anthropic SDK usage with zero code changes:
+
+```python
+import os
+os.environ["AGENTPULSE_API_KEY"] = "ap_..."
+
+# Option 1: Auto-patch on import
+os.environ["AGENTPULSE_AUTOPATCH"] = "1"
+import anthropic  # <- Automatically patched!
+
+# Option 2: Manual patching
+from agentpulse import patch_anthropic
+import anthropic
+patch_anthropic()  # <- Now all anthropic.messages.create() calls are monitored
+
+# Your existing code works unchanged
+client = anthropic.Anthropic()
+response = client.messages.create(
+    model="claude-3-sonnet-20240229",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+# ^ This call is now automatically tracked in AgentPulse!
+```
+
+**What gets tracked:**
+- Session creation for each API call
+- Token usage (input/output)
+- Cost estimation (based on 2026 Anthropic pricing)
+- Errors and response times
+- Model information
 
 ## How It Works
 
