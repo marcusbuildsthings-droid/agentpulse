@@ -1171,6 +1171,39 @@
         </div>`;
     }
 
+    function renderWelcomeBanner() {
+      const key = state.apiKey;
+      const name = state.agentName || localStorage.getItem('ap_agent_name') || 'my-agent';
+      return `
+        <div style="background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(16,185,129,0.1));border:1px solid var(--purple);border-radius:8px;padding:24px;margin-bottom:20px;position:relative">
+          <button onclick="dismissWelcome()" style="position:absolute;top:12px;right:12px;background:none;border:none;color:var(--text-3);cursor:pointer;font-size:18px">✕</button>
+          <div style="font-size:18px;font-weight:700;color:var(--green);margin-bottom:4px">🎉 Welcome to AgentPulse!</div>
+          <div style="color:var(--text-2);margin-bottom:16px">Your agent <strong style="color:var(--text-1)">${name}</strong> is set up. Add the SDK to start seeing data:</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">① Install</div>
+              <div class="code-block" style="margin:0;font-size:12px;cursor:pointer" onclick="navigator.clipboard.writeText('pip install agentpulse-sdk');this.style.borderColor='var(--green)';setTimeout(()=>this.style.borderColor='',1500)">
+                <span class="cm">$ </span>pip install agentpulse-sdk
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">② Add to your agent</div>
+              <div class="code-block" style="margin:0;font-size:12px;cursor:pointer" onclick="navigator.clipboard.writeText('import agentpulse\\nagentpulse.init(api_key=&quot;${key}&quot;)');this.style.borderColor='var(--green)';setTimeout(()=>this.style.borderColor='',1500)">
+                <span class="kw">import</span> agentpulse<br>
+                agentpulse.<span class="fn">init</span>(api_key=<span class="str">"${key}"</span>)
+              </div>
+            </div>
+          </div>
+          <div style="color:var(--text-3);font-size:11px;margin-top:12px">💡 Click any code block to copy. Your API key: <code style="color:var(--yellow);user-select:all">${key}</code></div>
+        </div>`;
+    }
+
+    function dismissWelcome() {
+      localStorage.removeItem('ap_just_registered');
+      const el = document.querySelector('.welcome-banner-wrap');
+      if (el) el.remove();
+    }
+
     function renderOverview() {
       const s = state.stats;
       if (!s) return '<div class="loading">Loading</div>';
@@ -1192,7 +1225,45 @@
       const evtSpark = s._eventTimeline || generateSparkData(24);
       const costSpark = s._costTimeline || generateSparkData(24, 0.5);
 
-      return `
+      const welcomeHtml = localStorage.getItem('ap_just_registered') ? '<div class="welcome-banner-wrap">'+renderWelcomeBanner()+'</div>' : '';
+
+      // Empty state: show setup guide when no events yet
+      if (totalEvents === 0 && !localStorage.getItem('ap_just_registered')) {
+        const apiKey = state.apiKey || 'YOUR_API_KEY';
+        return `
+        <div class="panel" style="text-align:center;padding:48px 32px;">
+          <div style="font-size:48px;margin-bottom:16px">📡</div>
+          <h2 style="margin:0 0 8px;color:var(--text-1)">Waiting for first event…</h2>
+          <p style="color:var(--text-3);margin:0 0 32px;max-width:480px;margin-left:auto;margin-right:auto">
+            Your dashboard is connected! Send your first event to see metrics, sessions, and costs light up.
+          </p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:700px;margin:0 auto;text-align:left">
+            <div>
+              <div style="font-weight:600;margin-bottom:8px;color:var(--text-2)">① Install the SDK</div>
+              <pre style="background:var(--bg-3);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;margin:0"><code>pip install agentpulse</code></pre>
+            </div>
+            <div>
+              <div style="font-weight:600;margin-bottom:8px;color:var(--text-2)">② Send a test event</div>
+              <pre style="background:var(--bg-3);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;margin:0"><code>from agentpulse import AgentPulse
+
+ap = AgentPulse(api_key="${esc(apiKey)}")
+ap.track("test_event", {"msg": "hello"})</code></pre>
+            </div>
+          </div>
+          <div style="margin-top:24px">
+            <div style="font-weight:600;margin-bottom:8px;color:var(--text-2)">Or use curl</div>
+            <pre style="background:var(--bg-3);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;max-width:700px;margin:0 auto;text-align:left"><code>curl -X POST ${esc(state.apiUrl || 'https://agentpulse-api.marcus-builds-things.workers.dev')}/v1/ingest \\
+  -H "Authorization: Bearer ${esc(apiKey)}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent":"my-agent","events":[{"kind":"test","ts":${Math.floor(Date.now()/1000)},"data":{}}]}'</code></pre>
+          </div>
+          <p style="color:var(--text-3);margin-top:24px;font-size:13px">
+            This page auto-refreshes. Once events arrive, your dashboard will populate automatically.
+          </p>
+        </div>`;
+      }
+
+      return welcomeHtml + `
         <div class="grid grid-4">
           <div class="stat-card">
             <div class="label">Events</div>
@@ -1935,9 +2006,17 @@
         const res = await fetch(url + '/v1/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
         const data = await res.json();
         if (!res.ok) { result.style.color='var(--red)'; result.textContent=data.error||'Registration failed'; return; }
-        result.style.color='var(--green)';
-        result.innerHTML='✓ Account created! Your API key:<br><code style="background:var(--bg-1);padding:6px 10px;display:block;margin-top:8px;font-size:14px;word-break:break-all;border:1px solid var(--green);user-select:all">'+data.api_key+'</code><br><span style="color:var(--yellow);font-size:12px">⚠ Save this key — it won\'t be shown again!</span>';
+        // Auto-connect after registration
         document.getElementById('ob-key').value = data.api_key;
+        state.apiUrl = url;
+        state.apiKey = data.api_key;
+        state.agentName = name;
+        localStorage.setItem('ap_api_url', url);
+        localStorage.setItem('ap_api_key', data.api_key);
+        localStorage.setItem('ap_agent_name', name);
+        localStorage.setItem('ap_just_registered', '1');
+        showApp();
+        return;
       } catch(e) { result.style.color='var(--red)'; result.textContent='Network error: '+e.message; }
     }
 
