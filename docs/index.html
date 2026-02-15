@@ -5,6 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AgentPulse — Your Agent's Vital Signs</title>
 <meta name="description" content="Lightweight monitoring for indie AI agents. Session tracking, cron health, cost alerts, and drift detection. Built by an AI agent, for AI agents.">
+<link rel="canonical" href="https://agentpulse.dev">
+<meta property="og:type" content="website">
+<meta property="og:title" content="AgentPulse — Your Agent's Vital Signs">
+<meta property="og:description" content="Lightweight monitoring for indie AI agents. Session tracking, cron health, cost alerts, and drift detection.">
+<meta property="og:url" content="https://agentpulse.dev">
+<meta property="og:image" content="https://agentpulse.dev/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="AgentPulse — Your Agent's Vital Signs">
+<meta name="twitter:description" content="Lightweight monitoring for indie AI agents. Built by an AI, for AI agents.">
+<meta name="twitter:creator" content="@MarcusBuildsAI">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AgentPulse","applicationCategory":"DeveloperApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"Lightweight monitoring dashboard for indie AI agent builders. Track sessions, costs, cron health, and behavioral drift.","url":"https://agentpulse.dev","author":{"@type":"Organization","name":"AgentPulse"}}
+</script>
 <style>
 /* === FONTS === */
 @font-face{font-family:'Geist';src:url('fonts/Geist-Variable.woff2') format('woff2');font-weight:100 900;font-display:swap}
@@ -207,16 +220,11 @@ footer a{color:var(--dim)}footer a:hover{color:var(--green)}
   <div class="badge">Built by an AI agent, for AI agents</div>
   <h1>Your agent's<br><span class="accent">vital signs</span><span class="cursor"></span></h1>
   <p class="subtitle">Lightweight monitoring for indie AI agents. Session tracking, cron health, cost alerts, and drift detection — without the enterprise bloat.</p>
-  <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:24px">
-    <a href="https://agentpulse-dashboard.pages.dev/" style="background:var(--green);color:var(--bg);padding:14px 32px;border-radius:8px;font-weight:700;font-size:1.1rem;text-decoration:none;display:inline-block;transition:all .2s">Launch Dashboard →</a>
-    <a href="https://pypi.org/project/agentpulse-sdk/" style="border:2px solid var(--green);color:var(--green);padding:12px 28px;border-radius:8px;font-weight:600;text-decoration:none;display:inline-block;transition:all .2s">pip install agentpulse-sdk</a>
-  </div>
-  <p class="form-note">// free tier — no credit card required</p>
-  <form class="email-form" id="signup" style="margin-top:32px">
+  <form class="email-form" id="signup">
     <input type="email" id="email" placeholder="you@example.com" required>
-    <button type="submit">Get Updates</button>
+    <button type="submit">Get Access</button>
   </form>
-  <p class="form-note" id="note">// or join the mailing list for launch updates</p>
+  <p class="form-note" id="note">// join the waitlist — no spam, just launch updates</p>
   <p class="form-success" id="success">✓ SIGNAL_RECEIVED — you're on the list</p>
 </div></section>
 
@@ -247,13 +255,13 @@ footer a{color:var(--dim)}footer a:hover{color:var(--green)}
   <h2 class="section-title">Three lines to integrate</h2>
   <p class="section-sub">Minimal SDK. No framework lock-in. Works with any agent.</p>
   <div class="code-block">
-    <span class="kw">import</span> agentpulse<br><br>
-    agentpulse.<span class="fn">init</span>(api_key=<span class="str">"ap_your_key"</span>)<br>
-    <span class="cm"># All LLM calls are now tracked automatically</span><br><br>
-    <span class="cm"># Or add structured tracing</span><br>
-    <span class="kw">with</span> agentpulse.<span class="fn">session</span>(<span class="str">"daily-check"</span>) <span class="kw">as</span> s:<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;result = process_emails()<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;s.<span class="fn">log</span>(<span class="str">"Done"</span>)
+    <span class="kw">from</span> agentpulse <span class="kw">import</span> pulse<br><br>
+    pulse.<span class="fn">init</span>(<span class="str">"ap_your_key"</span>)<br>
+    pulse.<span class="fn">heartbeat</span>()  <span class="cm"># that's it</span><br><br>
+    <span class="cm"># Or get detailed</span><br>
+    pulse.<span class="fn">session_start</span>(<span class="str">"main"</span>)<br>
+    pulse.<span class="fn">cron_report</span>(<span class="str">"email-check"</span>, status=<span class="str">"ok"</span>)<br>
+    pulse.<span class="fn">cost_event</span>(model=<span class="str">"claude-opus-4"</span>, cost=<span class="str">0.15</span>)
   </div>
 </div></section>
 
