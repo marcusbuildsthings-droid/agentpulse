@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pricing — AgentPulse</title>
+<meta name="description" content="Simple pricing for AI agent monitoring. Free tier for personal use, Pro for serious agent builders.">
+<link rel="canonical" href="https://agentpulse.dev/pricing">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Pricing — AgentPulse">
+<meta property="og:description" content="Simple pricing for AI agent monitoring. Free tier for personal use, Pro for serious builders.">
+<meta property="og:url" content="https://agentpulse.dev/pricing">
+<meta property="og:image" content="https://agentpulse.dev/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pricing — AgentPulse">
+<meta name="twitter:description" content="Simple pricing for AI agent monitoring.">
+<meta name="twitter:creator" content="@MarcusBuildsAI">
+<style>
+/* Reuse fonts from landing page */
+@font-face{font-family:'Geist';src:url('fonts/Geist-Variable.woff2') format('woff2');font-weight:100 900;font-display:swap}
+@font-face{font-family:'GeistPixel Square';src:url('fonts/GeistPixel-Square.woff2') format('woff2');font-display:swap}
+
+:root{
+  --bg:#050508;--surface:#0c0c12;--border:#1a1a28;
+  --text:#d0d0e0;--dim:#5a5a7a;--bright:#f0f0ff;
+  --green:#00ff41;--green-dim:#00cc33;--green-glow:rgba(0,255,65,.15);
+  --amber:#ffb000;--purple:#6c5ce7;
+  --body:'Geist',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+}
+body{font-family:var(--body);background:var(--bg);color:var(--text);line-height:1.6;margin:0;padding:0}
+.container{max-width:900px;margin:0 auto;padding:0 24px}
+.header{text-align:center;padding:60px 0 40px}
+.logo{font-size:2.5em;font-weight:700;margin-bottom:12px}
+.logo .pulse{color:var(--green)}
+.subtitle{font-size:1.2em;color:var(--dim);margin-bottom:40px}
+.back-link{display:inline-block;color:var(--green);text-decoration:none;margin-bottom:20px;font-size:0.9em}
+.back-link:hover{color:var(--bright)}
+.pricing-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin:40px 0}
+.plan{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;position:relative}
+.plan.featured{border-color:var(--green);background:rgba(0,255,65,0.02)}
+.plan.featured::before{content:'POPULAR';position:absolute;top:-12px;left:24px;background:var(--green);color:var(--bg);padding:4px 12px;font-size:0.75em;font-weight:600;border-radius:20px}
+.plan-name{font-size:1.5em;font-weight:600;margin-bottom:8px}
+.plan-price{font-size:2.5em;font-weight:700;color:var(--green);margin-bottom:16px}
+.plan-price .period{font-size:0.4em;color:var(--dim);font-weight:400}
+.plan-desc{color:var(--dim);margin-bottom:24px}
+.features{list-style:none;margin-bottom:32px}
+.features li{padding:8px 0;color:var(--text)}
+.features li::before{content:'✓';color:var(--green);font-weight:bold;margin-right:12px}
+.cta-button{width:100%;padding:16px;background:var(--green);color:var(--bg);border:none;border-radius:8px;font-size:1em;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;text-align:center;transition:background 0.2s}
+.cta-button:hover{background:var(--green-dim)}
+.cta-button.secondary{background:transparent;color:var(--green);border:1px solid var(--green)}
+.cta-button.secondary:hover{background:var(--green-glow)}
+.faq{margin:60px 0;text-align:center}
+.faq h2{font-size:2em;margin-bottom:32px}
+.faq-item{margin-bottom:24px;text-align:left}
+.faq-q{font-weight:600;margin-bottom:8px;color:var(--bright)}
+.faq-a{color:var(--dim);line-height:1.6}
+@media (max-width: 768px) {
+  .pricing-grid{grid-template-columns:1fr;gap:24px}
+  .header{padding:40px 0 20px}
+  .logo{font-size:2em}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <a href="/" class="back-link">← Back to AgentPulse</a>
+    <div class="logo">Agent<span class="pulse">Pulse</span></div>
+    <div class="subtitle">Simple pricing for agent builders</div>
+  </div>
+
+  <div class="pricing-grid">
+    <!-- Free Tier -->
+    <div class="plan">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">$0<span class="period">/month</span></div>
+      <div class="plan-desc">Perfect for personal projects and getting started</div>
+      <ul class="features">
+        <li>1 agent</li>
+        <li>10,000 events/month</li>
+        <li>7-day data retention</li>
+        <li>Basic dashboard</li>
+        <li>Community support</li>
+      </ul>
+      <a href="https://agentpulse-dashboard.pages.dev" class="cta-button secondary">Get Started Free</a>
+    </div>
+
+    <!-- Pro Tier -->
+    <div class="plan featured">
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">$15<span class="period">/month</span></div>
+      <div class="plan-desc">For serious agent builders who need more power</div>
+      <ul class="features">
+        <li>Unlimited agents</li>
+        <li>500,000 events/month</li>
+        <li>90-day data retention</li>
+        <li>Advanced analytics</li>
+        <li>Alerting system</li>
+        <li>Priority support</li>
+        <li>API access</li>
+      </ul>
+      <button class="cta-button" onclick="startSubscription()">Subscribe to Pro</button>
+    </div>
+  </div>
+
+  <div class="faq">
+    <h2>Frequently Asked Questions</h2>
+    
+    <div class="faq-item">
+      <div class="faq-q">What counts as an "event"?</div>
+      <div class="faq-a">Every session message, cron job run, cost report, and health check counts as one event. Most indie agents generate 1,000-5,000 events per month.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Can I change plans anytime?</div>
+      <div class="faq-a">Yes! Upgrade or downgrade anytime. Changes take effect immediately, and we'll prorate billing automatically.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">What happens if I exceed my event limit?</div>
+      <div class="faq-a">Free accounts are throttled after 10K events. Pro accounts continue working and we'll reach out if you consistently exceed limits.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Is my agent data secure?</div>
+      <div class="faq-a">Absolutely. We use encrypted storage, hashed API keys, and never store sensitive content. Your data stays private.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function startSubscription() {
+  // For now, redirect to a simple payment page
+  // TODO: Integrate with Stripe Checkout
+  alert('Stripe integration coming soon! Email marcus.builds.things@gmail.com to get early Pro access.');
+}
+</script>
+</body>
+</html>
