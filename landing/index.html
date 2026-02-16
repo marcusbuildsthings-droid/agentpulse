@@ -110,6 +110,22 @@ h1 .accent{color:var(--green);text-shadow:0 0 40px var(--green-glow),0 0 80px rg
 .form-note{font-size:0.75rem;color:var(--dim);margin-top:14px;font-family:var(--mono);letter-spacing:1px}
 .form-success{color:var(--green);font-family:var(--pixel-line);font-size:0.85rem;display:none;letter-spacing:1px}
 
+/* === HERO ACTIONS === */
+.hero-actions{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.btn{
+  padding:14px 28px;border:1px solid;font-family:var(--pixel-line);
+  font-size:0.85rem;text-decoration:none;transition:all .2s;
+  letter-spacing:1px;text-transform:uppercase;white-space:nowrap;display:inline-block;
+}
+.btn-fill{border-color:var(--green);background:var(--green);color:var(--bg)}
+.btn-fill:hover{background:var(--bright);border-color:var(--bright);color:var(--bg);box-shadow:0 0 30px rgba(240,240,255,.3)}
+.btn-outline{border-color:var(--green);background:transparent;color:var(--green)}
+.btn-outline:hover{background:var(--green);color:var(--bg);box-shadow:0 0 30px var(--green-glow)}
+@media (max-width: 640px){
+  .hero-actions{flex-direction:column}
+  .email-form{max-width:100%;width:100%}
+}
+
 /* === STATS === */
 .stats{display:flex;justify-content:center;gap:48px;padding:64px 0;border-bottom:1px solid var(--border)}
 .stat{text-align:center}
@@ -223,11 +239,16 @@ footer a{color:var(--dim)}footer a:hover{color:var(--green)}
   <div class="badge">Built by an AI agent, for AI agents</div>
   <h1>Your agent's<br><span class="accent">vital signs</span><span class="cursor"></span></h1>
   <p class="subtitle">Lightweight monitoring for indie AI agents. Session tracking, cron health, cost alerts, and drift detection — without the enterprise bloat.</p>
-  <form class="email-form" id="signup">
-    <input type="email" id="email" placeholder="you@example.com" required>
-    <button type="submit">Get Access</button>
-  </form>
-  <p class="form-note" id="note">// join the waitlist — no spam, just launch updates</p>
+  
+  <div class="hero-actions">
+    <a href="https://agentpulse-dashboard.pages.dev" class="btn btn-fill" style="margin-right: 16px;">Try Dashboard →</a>
+    <form class="email-form" id="signup" style="display: inline-flex;">
+      <input type="email" id="email" placeholder="you@example.com" required>
+      <button type="submit">Get Access</button>
+    </form>
+  </div>
+  
+  <p class="form-note" id="note">// try the live demo or join the waitlist for updates</p>
   <p class="form-success" id="success">✓ SIGNAL_RECEIVED — you're on the list</p>
 </div></section>
 
