@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentpulse-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Zero-config agent observability SDK — auto-captures LLM calls, costs, and traces"
 readme = "README.md"
 license = "MIT"
