@@ -1789,24 +1789,167 @@ ap.track("test_event", {"msg": "hello"})</code></pre>
     };
 
     // ── Events View ─────────────────────────────────────
+    // Events state
+    let eventsState = { filter: 'all', sort: 'time', sortDir: 'desc', events: [] };
+
     async function renderEventsView() {
       setHeader('Events', periodSelector());
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">Loading events</div>';
-      const events = await fetchEvents(null, 100);
+      const events = await fetchEvents(null, 500);
       if (!events.length) { content.innerHTML = '<div class="empty"><div class="empty-icon">◎</div><h3>No events</h3><p>Connect your agent to start seeing events.</p></div>'; return; }
-
-      content.innerHTML = `<div class="panel"><div class="panel-header">Recent Events <span class="panel-count">${events.length}</span></div>
-        <div class="event-stream">${events.map(e => {
-          const ts = new Date(e.ts * 1000).toLocaleTimeString();
-          const detail = e.session_key ? e.session_key : JSON.stringify(e.data).slice(0, 80);
-          return `<div class="event-row">
-            <span class="ts">${esc(ts)}</span>
-            <span class="kind">${esc(e.kind)}</span>
-            <span class="detail">${esc(detail)}</span>
-          </div>`;
-        }).join('')}</div></div>`;
+      
+      eventsState.events = events;
+      renderEventsTable();
     }
+
+    function renderEventsTable() {
+      const content = document.getElementById('content');
+      const { events, filter, sort, sortDir } = eventsState;
+      
+      // Filter events
+      let filtered = filter === 'all' ? events : events.filter(e => e.kind === filter);
+      
+      // Get unique kinds for filter buttons
+      const kinds = [...new Set(events.map(e => e.kind))];
+      const kindCounts = {};
+      kinds.forEach(k => { kindCounts[k] = events.filter(e => e.kind === k).length; });
+      
+      // Sort events
+      filtered.sort((a, b) => {
+        let aVal, bVal;
+        if (sort === 'time') { aVal = a.ts; bVal = b.ts; }
+        else if (sort === 'kind') { aVal = a.kind; bVal = b.kind; }
+        else if (sort === 'session') { aVal = a.session_key || ''; bVal = b.session_key || ''; }
+        else if (sort === 'tokens') { aVal = a.data?.tokens || 0; bVal = b.data?.tokens || 0; }
+        else if (sort === 'cost') { aVal = a.data?.cost_usd || 0; bVal = b.data?.cost_usd || 0; }
+        else { aVal = a.ts; bVal = b.ts; }
+        
+        if (sortDir === 'asc') return aVal > bVal ? 1 : -1;
+        return aVal < bVal ? 1 : -1;
+      });
+      
+      // Filter buttons
+      const filterButtons = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+          <button class="btn ${filter === 'all' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="filterEvents('all')">All (${events.length})</button>
+          ${kinds.map(k => `<button class="btn ${filter === k ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="filterEvents('${k}')">${k} (${kindCounts[k]})</button>`).join('')}
+        </div>`;
+      
+      // Build table
+      const table = `<table>
+        <thead><tr>
+          <th onclick="sortEvents('time')" style="cursor:pointer">Time ${sort === 'time' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</th>
+          <th onclick="sortEvents('kind')" style="cursor:pointer">Kind ${sort === 'kind' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</th>
+          <th onclick="sortEvents('session')" style="cursor:pointer">Session ${sort === 'session' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</th>
+          <th>Model</th>
+          <th onclick="sortEvents('tokens')" style="cursor:pointer;text-align:right">Tokens ${sort === 'tokens' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</th>
+          <th onclick="sortEvents('cost')" style="cursor:pointer;text-align:right">Cost ${sort === 'cost' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</th>
+          <th>Status</th>
+          <th>Detail</th>
+        </tr></thead>
+        <tbody>
+          ${filtered.map(e => {
+            const relTime = formatRelativeTime(e.ts);
+            const kindBadge = getKindBadge(e.kind);
+            const session = formatSession(e.session_key);
+            const model = e.data?.model ? esc(e.data.model.split('/').pop()) : '—';
+            const tokens = e.data?.tokens ? formatNum(e.data.tokens) : '—';
+            const cost = e.data?.cost_usd ? `$${e.data.cost_usd.toFixed(4)}` : '—';
+            const status = formatStatus(e.data?.status, e.data?.error);
+            const detail = formatEventDetail(e);
+            
+            return `<tr>
+              <td style="font-family:var(--mono);font-size:11px;color:var(--text-2)">${relTime}</td>
+              <td>${kindBadge}</td>
+              <td style="font-family:var(--mono);font-size:11px">${session}</td>
+              <td style="font-size:11px">${model}</td>
+              <td style="text-align:right;font-family:var(--mono);font-size:11px">${tokens}</td>
+              <td style="text-align:right;font-family:var(--mono);font-size:11px">${cost}</td>
+              <td>${status}</td>
+              <td style="font-size:12px;color:var(--text-2);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${detail}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+      
+      content.innerHTML = `<div class="panel">
+        <div class="panel-header">Events <span class="panel-count">${filtered.length}</span></div>
+        ${filterButtons}
+        ${table}
+      </div>`;
+    }
+    
+    function formatRelativeTime(ts) {
+      const now = Date.now() / 1000;
+      const diff = now - ts;
+      if (diff < 60) return `${Math.floor(diff)}s ago`;
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      return new Date(ts * 1000).toLocaleDateString();
+    }
+    
+    function getKindBadge(kind) {
+      const colors = {
+        span: 'info',
+        llm: 'info',
+        cost: 'warn',
+        cron: 'badge',
+        error: 'fail',
+        session_start: 'ok',
+        session_end: 'ok'
+      };
+      const color = colors[kind] || 'badge';
+      return `<span class="badge ${color}">${esc(kind)}</span>`;
+    }
+    
+    function formatSession(key) {
+      if (!key) return '—';
+      const parts = key.split(':');
+      return esc(parts[parts.length - 1] || key);
+    }
+    
+    function formatStatus(status, error) {
+      if (error) return `<span class="badge fail">error</span>`;
+      if (status === 'ok' || status === 'success') return `<span class="badge ok">ok</span>`;
+      if (status === 'fail' || status === 'error') return `<span class="badge fail">fail</span>`;
+      if (status) return `<span class="badge">${esc(status)}</span>`;
+      return '—';
+    }
+    
+    function formatEventDetail(e) {
+      const d = e.data || {};
+      let parts = [];
+      
+      if (d.summary) parts.push(esc(d.summary));
+      if (d.job) parts.push(`Job: ${esc(d.job)}`);
+      if (d.duration) parts.push(`${d.duration}ms`);
+      if (d.error) parts.push(`Error: ${esc(d.error)}`);
+      if (d.message) parts.push(esc(d.message));
+      
+      if (parts.length === 0) {
+        // Fallback: show first few keys
+        const keys = Object.keys(d).filter(k => !['model','tokens','cost_usd','status'].includes(k)).slice(0, 3);
+        parts = keys.map(k => `${k}=${String(d[k]).slice(0, 30)}`);
+      }
+      
+      return parts.length > 0 ? parts.join(' · ') : '—';
+    }
+    
+    window.filterEvents = (kind) => {
+      eventsState.filter = kind;
+      renderEventsTable();
+    };
+    
+    window.sortEvents = (col) => {
+      if (eventsState.sort === col) {
+        eventsState.sortDir = eventsState.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        eventsState.sort = col;
+        eventsState.sortDir = 'desc';
+      }
+      renderEventsTable();
+    };
 
     // ── Alerts View ─────────────────────────────────────
     async function renderAlerts() {
