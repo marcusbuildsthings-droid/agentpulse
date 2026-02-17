@@ -1166,14 +1166,23 @@
 
     function renderSettings() {
       setHeader('Settings');
+      const maskedKey = state.apiKey ? '•'.repeat(Math.max(0, state.apiKey.length - 8)) + state.apiKey.slice(-8) : '';
       return `
         <div class="panel">
           <div class="panel-header">Connection</div>
           <div class="config-panel">
             <label>API Endpoint</label>
             <input id="cfg-url" type="url" placeholder="https://agentpulse-api.marcus-builds-things.workers.dev" value="${esc(state.apiUrl)}">
-            <label>API Key</label>
-            <input id="cfg-key" type="text" placeholder="ap_..." value="${esc(state.apiKey)}">
+            <label style="display:flex;align-items:center;justify-content:space-between">
+              <span>API Key</span>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:10px" onclick="copyApiKey()">Copy</button>
+                <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:10px" onclick="toggleApiKeyVisibility()">
+                  <span id="key-toggle-text">Show</span>
+                </button>
+              </div>
+            </label>
+            <input id="cfg-key" type="password" placeholder="ap_..." value="${esc(state.apiKey)}" readonly style="cursor:pointer" onclick="this.select()">
             <div style="display:flex;gap:8px;margin-top:4px">
               <button class="btn btn-primary" onclick="saveConfig()">Save & Connect</button>
               <button class="btn btn-ghost" onclick="enableDemo()">Try Demo</button>
@@ -1181,9 +1190,31 @@
           </div>
         </div>`;
     }
+    
+    window.copyApiKey = () => {
+      navigator.clipboard.writeText(state.apiKey);
+      const btn = event.target;
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.style.color = 'var(--green)';
+      setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+    };
+    
+    window.toggleApiKeyVisibility = () => {
+      const input = document.getElementById('cfg-key');
+      const toggle = document.getElementById('key-toggle-text');
+      if (input.type === 'password') {
+        input.type = 'text';
+        toggle.textContent = 'Hide';
+      } else {
+        input.type = 'password';
+        toggle.textContent = 'Show';
+      }
+    };
 
     function renderWelcomeBanner() {
       const key = state.apiKey;
+      const maskedKey = key ? '•'.repeat(Math.max(0, key.length - 8)) + key.slice(-8) : '';
       const name = state.agentName || localStorage.getItem('ap_agent_name') || 'my-agent';
       return `
         <div style="background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(16,185,129,0.1));border:1px solid var(--purple);border-radius:8px;padding:24px;margin-bottom:20px;position:relative">
@@ -1201,11 +1232,15 @@
               <div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">② Add to your agent</div>
               <div class="code-block" style="margin:0;font-size:12px;cursor:pointer" onclick="navigator.clipboard.writeText('import agentpulse\\nagentpulse.init(api_key=&quot;${key}&quot;)');this.style.borderColor='var(--green)';setTimeout(()=>this.style.borderColor='',1500)">
                 <span class="kw">import</span> agentpulse<br>
-                agentpulse.<span class="fn">init</span>(api_key=<span class="str">"${key}"</span>)
+                agentpulse.<span class="fn">init</span>(api_key=<span class="str">"<span style="user-select:none">YOUR_KEY</span>"</span>)
               </div>
             </div>
           </div>
-          <div style="color:var(--text-3);font-size:11px;margin-top:12px">💡 Click any code block to copy. Your API key: <code style="color:var(--yellow);user-select:all">${key}</code></div>
+          <div style="color:var(--text-3);font-size:11px;margin-top:12px">
+            💡 Click code blocks to copy full setup code. 
+            API Key: <code style="color:var(--yellow);font-family:var(--mono)">${maskedKey}</code>
+            <button onclick="navigator.clipboard.writeText('${key}');event.target.textContent='Copied!';setTimeout(()=>event.target.textContent='Copy',1500)" style="margin-left:8px;padding:2px 8px;font-size:10px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);cursor:pointer;border-radius:4px">Copy</button>
+          </div>
         </div>`;
     }
 
