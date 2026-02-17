@@ -2182,6 +2182,26 @@ ap.track("test_event", {"msg": "hello"})</code></pre>
       setView('overview');
     }
 
+    async function createDefaultAlerts() {
+      const defaultAlerts = [
+        { rule_name: 'Budget Warning', condition: { metric: 'daily_cost', op: 'gt', threshold: 5 }, channel: 'email' },
+        { rule_name: 'Budget Critical', condition: { metric: 'daily_cost', op: 'gt', threshold: 10 }, channel: 'email' },
+        { rule_name: 'Cron Reliability', condition: { metric: 'cron_fail_streak', op: 'gte', threshold: 3 }, channel: 'email' }
+      ];
+      
+      for (const alert of defaultAlerts) {
+        try {
+          await fetch(state.apiUrl + '/v1/alerts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + state.apiKey },
+            body: JSON.stringify(alert)
+          });
+        } catch (e) {
+          console.log('Failed to create default alert:', alert.rule_name, e);
+        }
+      }
+    }
+
     async function registerAccount() {
       const name = document.getElementById('ob-reg-name').value.trim();
       const email = document.getElementById('ob-reg-email').value.trim();
@@ -2204,6 +2224,10 @@ ap.track("test_event", {"msg": "hello"})</code></pre>
         localStorage.setItem('ap_api_key', data.api_key);
         localStorage.setItem('ap_agent_name', name);
         localStorage.setItem('ap_just_registered', '1');
+        
+        // Create default alerts in background (don't block UI)
+        createDefaultAlerts().catch(e => console.log('Default alerts failed:', e));
+        
         showApp();
         return;
       } catch(e) { result.style.color='var(--red)'; result.textContent='Network error: '+e.message; }
